@@ -181,10 +181,10 @@
                             <h3 class="section-title">Informes Rápidos</h3>
                             <div class="sidebar-widgets-wrap">
                                 <!-- Widget 1: Ventas del mes -->
-                                <div class="widget-card" onclick="triggerQuickReport('Genera un informe de todas las ventas realizadas durante el mes actual mostrando número total de ventas, facturación total y piezas más vendidas.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Genera un informe de todas las ventas realizadas durante el mes actual, mostrando número total de ventas, facturación total, piezas más vendidas, y miniatura de gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Ventas del mes</h4>
-                                        <p>Resumen de ventas actuales.</p>
+                                        <p>resumen de ventas actuales</p>
                                         <div class="widget-thumbnail">
                                             <canvas id="thumbVentas"></canvas>
                                         </div>
@@ -192,10 +192,10 @@
                                 </div>
 
                                 <!-- Widget 2: Stock actual -->
-                                <div class="widget-card" onclick="triggerQuickReport('Muestra el stock disponible agrupado por familia de producto.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Muestra el stock disponible agrupado por familia, incluyendo miniatura de gráfico circular.')">
                                     <div class="widget-content">
                                         <h4>Stock actual</h4>
-                                        <p>Distribución del inventario disponible.</p>
+                                        <p>distribución del inventario por familia</p>
                                         <div class="widget-thumbnail">
                                             <canvas id="thumbStock"></canvas>
                                         </div>
@@ -203,10 +203,10 @@
                                 </div>
 
                                 <!-- Widget 3: Piezas más vendidas -->
-                                <div class="widget-card" onclick="triggerQuickReport('Genera un ranking de las piezas más vendidas en los últimos 30 días.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Genera ranking de piezas más vendidas últimos 30 días, miniatura de gráfico de barras horizontales.')">
                                     <div class="widget-content">
                                         <h4>Piezas más vendidas</h4>
-                                        <p>Ranking de rotación.</p>
+                                        <p>ranking de piezas con mayor rotación</p>
                                         <div class="widget-thumbnail" style="height: 100px;">
                                             <canvas id="thumbPiezasTop"></canvas>
                                         </div>
@@ -214,10 +214,10 @@
                                 </div>
 
                                 <!-- Widget 4: Vehículos más rentables -->
-                                <div class="widget-card" onclick="triggerQuickReport('Analiza el beneficio generado por cada vehículo desmontado y muestra los más rentables.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Analiza beneficio generado por cada vehículo y muestra los más rentables, incluyendo miniatura de gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Vehículos más rentables</h4>
-                                        <p>Por margen de beneficio.</p>
+                                        <p>beneficio por vehículo</p>
                                         <div class="widget-thumbnail" style="height: 100px;">
                                             <canvas id="thumbVehiculosRentables"></canvas>
                                         </div>
@@ -225,10 +225,10 @@
                                 </div>
 
                                 <!-- Widget 5: Piezas sin rotación -->
-                                <div class="widget-card" onclick="triggerQuickReport('Identifica las piezas que llevan más de 6 meses en stock sin vender.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Identifica piezas con más de 6 meses sin vender, miniatura de tabla o gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Piezas sin rotación</h4>
-                                        <p>Stock anticuado y alertas.</p>
+                                        <p>piezas que no se venden</p>
                                         <div class="widget-thumbnail" style="height: 100px;">
                                             <canvas id="thumbPiezasMuertas"></canvas>
                                         </div>
