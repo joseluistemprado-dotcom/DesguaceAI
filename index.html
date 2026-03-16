@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inteligencia de Negocio - Gestión de Desguaces</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Phosphor Icons for modern iconography -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="ph-fill ph-car-profile logo-icon"></i>
+                <h2>DesguacePro</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item">
+                    <i class="ph ph-squares-four"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="ph ph-car"></i>
+                    <span>Vehículos</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="ph ph-wrench"></i>
+                    <span>Recambios</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <i class="ph ph-shopping-cart"></i>
+                    <span>Ventas</span>
+                </a>
+                <a href="#" class="nav-item active">
+                    <i class="ph ph-chart-line-up"></i>
+                    <span>Inteligencia de Negocio</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="avatar">AD</div>
+                    <div class="user-info">
+                        <span class="user-name">Admin</span>
+                        <span class="user-role">Gerente</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="top-header">
+                <h1>Inteligencia de Negocio</h1>
+                <div class="header-actions">
+                    <button class="icon-btn"><i class="ph ph-bell"></i></button>
+                    <button class="icon-btn"><i class="ph ph-gear"></i></button>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                <div class="dashboard-layout">
+                    <!-- MAIN COLUMN: AI Prompt & Results -->
+                    <div class="dashboard-main-col">
+                        <!-- AI Assistant Panel -->
+                        <section class="ai-panel glass-card">
+                            <div class="ai-header">
+                                <div class="ai-icon">
+                                    <i class="ph-fill ph-sparkle"></i>
+                                </div>
+                                <div>
+                                    <h2>Analista IA del Desguace</h2>
+                                    <p>Describe el análisis que necesitas y generaré un informe completo al instante.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="input-group">
+                                <textarea id="promptInput" placeholder="Escribe qué informe necesitas... Ejemplo: Muestra una comparativa de ventas de motores del último trimestre frente al anterior." rows="4"></textarea>
+                            </div>
+
+                            <div class="action-row" style="justify-content: flex-end;">
+                                <button id="generateBtn" class="primary-btn">
+                                    <i class="ph-bold ph-magic-wand"></i>
+                                    Generar informe
+                                </button>
+                            </div>
+                        </section>
+
+                        <!-- Loading Indicator -->
+                        <div id="loadingState" class="loading-container hidden">
+                            <div class="spinner"></div>
+                            <p>La IA está analizando los datos y generando tu informe...</p>
+                        </div>
+
+                        <!-- Generated Report Interface -->
+                        <section id="reportContainer" class="report-panel hidden">
+                            <div class="report-header">
+                                <h2 id="reportTitle">Título del Informe</h2>
+                                <div class="report-actions">
+                                    <button class="secondary-btn"><i class="ph ph-download-simple"></i> Exportar PDF</button>
+                                    <button class="secondary-btn"><i class="ph ph-printer"></i> Imprimir</button>
+                                </div>
+                            </div>
+
+                            <div class="report-summary">
+                                <i class="ph-fill ph-info"></i>
+                                <p id="reportSummaryText">Resumen ejecutivo del informe generado.</p>
+                            </div>
+
+                            <!-- Key Metrics -->
+                            <div class="metrics-grid" id="metricsContainer">
+                                <!-- Metrics injected dynamically -->
+                            </div>
+
+                            <!-- Visualizations & Data -->
+                            <div class="data-grid">
+                                <div class="table-container glass-card" id="tableContainer">
+                                    <h3>Desglose de Datos</h3>
+                                    <div class="table-responsive">
+                                        <table id="dataTable">
+                                            <thead>
+                                                <tr id="tableHeadRow">
+                                                    <!-- Headers dynamic -->
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tableBody">
+                                                <!-- Rows dynamic -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="chart-container glass-card" id="chartContainerDiv">
+                                    <h3>Visualización Gráfica</h3>
+                                    <canvas id="mainChart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Conclusions Panel -->
+                            <div class="conclusions-panel glass-card" id="conclusionsPanel" style="margin-top: 1.5rem; background-color: #f8fafc; border-left: 4px solid var(--primary);">
+                                <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.125rem; font-weight: 600;"><i class="ph-fill ph-lightbulb"></i> Conclusiones</h3>
+                                <div id="reportConclusionsText" style="color: var(--text-main); font-size: 0.95rem; line-height: 1.6;">
+                                    <!-- Conclusions injected dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- Related Reports Suggestions -->
+                            <div id="relatedReportsContainer" class="related-reports-section" style="margin-top: 2.5rem;">
+                                <h3 class="section-title">Informes relacionados sugeridos</h3>
+                                <div class="quick-widgets-grid" id="relatedWidgetsGrid">
+                                    <!-- Injected dynamically -->
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- SIDEBAR COLUMN: Automated Insights & Quick List -->
+                    <aside class="dashboard-side-col">
+                        <!-- Automated Business Recommendations -->
+                        <section class="recommendations-panel glass-card">
+                            <div class="ai-header" style="margin-bottom: 1rem;">
+                                <div class="ai-icon" style="background-color: #fef3c7; color: #d97706; width: 40px; height: 40px; font-size: 1.25rem;">
+                                    <i class="ph-fill ph-lightbulb"></i>
+                                </div>
+                                <div>
+                                    <h3 style="font-size: 1.125rem; margin-bottom: 0.1rem;">Recomendaciones de negocio IA</h3>
+                                    <p style="font-size: 0.8rem;">Análisis en segundo plano</p>
+                                </div>
+                            </div>
+                            <div class="recommendations-list" id="recommendationsList">
+                                <!-- Loaded dynamically via JS -->
+                            </div>
+                        </section>
+
+                        <!-- Quick Widgets Section -->
+                        <section class="quick-widgets-section">
+                            <h3 class="section-title">Informes Rápidos</h3>
+                            <div class="sidebar-widgets-wrap">
+                                <!-- Widget 1: Ventas del mes -->
+                                <div class="widget-card" onclick="triggerQuickReport('Genera un informe de todas las ventas realizadas durante el mes actual mostrando número total de ventas, facturación total y piezas más vendidas.')">
+                                    <div class="widget-content">
+                                        <h4>Ventas del mes</h4>
+                                        <p>Resumen de ventas actuales.</p>
+                                        <div class="widget-thumbnail">
+                                            <canvas id="thumbVentas"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Widget 2: Stock actual -->
+                                <div class="widget-card" onclick="triggerQuickReport('Muestra el stock disponible agrupado por familia de producto.')">
+                                    <div class="widget-content">
+                                        <h4>Stock actual</h4>
+                                        <p>Distribución del inventario disponible.</p>
+                                        <div class="widget-thumbnail">
+                                            <canvas id="thumbStock"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Widget 3: Piezas más vendidas -->
+                                <div class="widget-card" onclick="triggerQuickReport('Genera un ranking de las piezas más vendidas en los últimos 30 días.')">
+                                    <div class="widget-content">
+                                        <h4>Piezas más vendidas</h4>
+                                        <p>Ranking de rotación.</p>
+                                        <div class="widget-thumbnail" style="height: 100px;">
+                                            <canvas id="thumbPiezasTop"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Widget 4: Vehículos más rentables -->
+                                <div class="widget-card" onclick="triggerQuickReport('Analiza el beneficio generado por cada vehículo desmontado y muestra los más rentables.')">
+                                    <div class="widget-content">
+                                        <h4>Vehículos más rentables</h4>
+                                        <p>Por margen de beneficio.</p>
+                                        <div class="widget-thumbnail" style="height: 100px;">
+                                            <canvas id="thumbVehiculosRentables"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Widget 5: Piezas sin rotación -->
+                                <div class="widget-card" onclick="triggerQuickReport('Identifica las piezas que llevan más de 6 meses en stock sin vender.')">
+                                    <div class="widget-content">
+                                        <h4>Piezas sin rotación</h4>
+                                        <p>Stock anticuado y alertas.</p>
+                                        <div class="widget-thumbnail" style="height: 100px;">
+                                            <canvas id="thumbPiezasMuertas"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </div> <!-- End Dashboard Layout -->
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
