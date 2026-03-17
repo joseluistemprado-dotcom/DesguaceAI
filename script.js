@@ -1,822 +1,715 @@
 // =====================================================
-// ANALISTA IA DEL DESGUACE — Motor de Prompts IA 100%
+// DESGUACEPRO — Motor SaaS Completo v2.0
 // =====================================================
 
-// ==== DOM Elements ====
+// === ESTADO GLOBAL ===
+const DB = { vehiculos: [], piezas: [], ventas: [] };
+let currentView = 'bi';
+let chartInstance = null;
+let currentReportData = null;
+
+// Paginación
+const PAGE_SIZE = 50;
+const pagination = { vehiculos: 1, recambios: 1, ventas: 1 };
+
+// === DOM REFERENCES ===
 const promptInput = document.getElementById('promptInput');
 const generateBtn = document.getElementById('generateBtn');
 const loadingState = document.getElementById('loadingState');
 const reportContainer = document.getElementById('reportContainer');
+const reportTitle = document.getElementById('reportTitle');
+const reportSummaryText = document.getElementById('reportSummaryText');
 const metricsContainer = document.getElementById('metricsContainer');
 const tableHeadRow = document.getElementById('tableHeadRow');
 const tableBody = document.getElementById('tableBody');
-const reportTitle = document.getElementById('reportTitle');
-const reportSummaryText = document.getElementById('reportSummaryText');
 const reportConclusionsText = document.getElementById('reportConclusionsText');
-const relatedWidgetsGrid = document.getElementById('relatedWidgetsGrid');
 const relatedReportsContainer = document.getElementById('relatedReportsContainer');
-
-let chartInstance = null;
+const relatedWidgetsGrid = document.getElementById('relatedWidgetsGrid');
 
 // =====================================================
-// BASE DE CONOCIMIENTO SIMULADA (datos internos de IA)
+// 1. DATA ENGINE — Carga CSVs en memoria
 // =====================================================
-//
-// VEHÍCULOS: id, marca, modelo, fecha_entrada, coste_compra
-// PIEZAS:    id, nombre, familia, vehiculo_id, precio
-// VENTAS:    id, pieza_id, fecha, precio_venta, cliente
-// STOCK:     pieza_id, cantidad
-//
-// El agente interpreta el lenguaje natural del usuario
-// y genera informes completos usando este contexto interno.
-// =====================================================
+function loadCSV(file) {
+    return new Promise((resolve) => {
+        Papa.parse(file, {
+            download: true, header: true, skipEmptyLines: true,
+            complete: (r) => resolve(r.data)
+        });
+    });
+}
 
-const aiKnowledgeBase = {
-
-    ventas_mes: {
-        title: "Informe de Ventas — Mes Actual",
-        summary: "He analizado el total de operaciones de venta registradas en el período en curso. Se detecta un crecimiento del 15% impulsado principalmente por la familia de motores y cajas de cambio de grupo VAG.",
-        chartType: "bar",
-        chartConfig: {
-            labels: ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
-            datasets: [{
-                label: 'Facturación (€)',
-                data: [10200, 11500, 9800, 13730],
-                backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                borderColor: 'rgba(37, 99, 235, 1)',
-                borderWidth: 2,
-                borderRadius: 6
-            }]
-        },
-        metrics: [
-            { title: "Facturación Total", value: "45,230€", icon: "ph-currency-eur", trend: "up", trendValue: "+15%" },
-            { title: "Ventas Totales", value: "342", icon: "ph-shopping-cart", trend: "up", trendValue: "+8%" },
-            { title: "Ticket Medio", value: "132€", icon: "ph-receipt", trend: "up", trendValue: "+5%" },
-            { title: "Top Categoría", value: "Motores", icon: "ph-engine", trend: "neutral", trendValue: "↑" }
-        ],
-        table: {
-            headers: ["Categoría", "Unidades", "Facturación", "Margen"],
-            rows: [
-                ["Motores", "45", "18,500€", "42%"],
-                ["Cajas de Cambio", "38", "12,400€", "38%"],
-                ["Carrocería Frontal", "85", "6,800€", "55%"],
-                ["Iluminación", "120", "4,500€", "60%"],
-                ["Otros", "54", "3,030€", "45%"]
-            ]
-        },
-        conclusions: "<strong>1. Crecimiento sostenido:</strong> Facturación sube +15% vs mes anterior.<br><br><strong>2. Oportunidad en Iluminación:</strong> Menor ticket pero mayor margen (60%). Recomendamos packs de faros completos para aumentar volumen.<br><br><strong>3. Acción sugerida:</strong> Potenciar stock de cajas automáticas VAG dado el alto margen y velocidad de venta.",
-        relatedIds: ["piezas_top", "vehiculos_rentables", "ventas_comparativa"]
-    },
-
-    stock_actual: {
-        title: "Distribución de Stock por Familia",
-        summary: "He cruzado el inventario actual con las familias de pieza registradas. La mecánica representa más del 50% del valor inmovilizado. El período de rotación medio es de 45 días.",
-        chartType: "doughnut",
-        chartConfig: {
-            labels: ["Mecánica", "Carrocería", "Interior", "Electrónica"],
-            datasets: [{
-                label: 'Piezas en Stock',
-                data: [5000, 4500, 3000, 2000],
-                backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'],
-                borderWidth: 2,
-                hoverOffset: 8
-            }]
-        },
-        metrics: [
-            { title: "Piezas Totales", value: "14,500", icon: "ph-stack", trend: "neutral", trendValue: "-1%" },
-            { title: "Valor Estimado", value: "850,000€", icon: "ph-vault", trend: "up", trendValue: "+2%" },
-            { title: "Rotación Media", value: "45 días", icon: "ph-arrows-clockwise", trend: "down", trendValue: "-5 días" },
-            { title: "Familias Activas", value: "4", icon: "ph-tag", trend: "neutral", trendValue: "=" }
-        ],
-        table: {
-            headers: ["Familia", "Cantidad (uds)", "Valor (€)", "% del Total"],
-            rows: [
-                ["Mecánica", "5,000", "450,000€", "52.9%"],
-                ["Carrocería", "4,500", "225,000€", "26.5%"],
-                ["Interior", "3,000", "75,000€", "8.8%"],
-                ["Electrónica", "2,000", "100,000€", "11.8%"]
-            ]
-        },
-        conclusions: "<strong>1. Peso de la Mecánica:</strong> Representa más del 50% del valor. Vigilar caducidad de consumibles.<br><br><strong>2. Optimización Interior:</strong> Reducir stock mediante promociones cruzadas o lotes B2B.<br><br><strong>3. Acción sugerida:</strong> Auditoría de los 200 artículos de menor rotación en Electrónica.",
-        relatedIds: ["piezas_muertas", "piezas_top", "ventas_mes"]
-    },
-
-    piezas_top: {
-        title: "Ranking de Piezas Más Vendidas — Últimos 30 Días",
-        summary: "He procesado todas las ventas del sistema en el último mes e identificado las referencias con mayor velocidad de salida. Las piezas de colisión (faros, retrovisores) dominan la rotación.",
-        chartType: "bar-horizontal",
-        chartConfig: {
-            labels: ["Faros Sup.", "Alternadores", "Retrovisores", "Pilotos Tras.", "Motores"],
-            datasets: [{
-                label: 'Unidades Vendidas',
-                data: [145, 112, 98, 85, 45],
-                backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                borderColor: 'rgba(16, 185, 129, 1)',
-                borderWidth: 2,
-                borderRadius: 6
-            }]
-        },
-        metrics: [
-            { title: "Top Pieza", value: "Faros Sup.", icon: "ph-lightbulb", trend: "up", trendValue: "+20%" },
-            { title: "Top #2", value: "Alternadores", icon: "ph-lightning", trend: "up", trendValue: "+15%" },
-            { title: "Top #3", value: "Retrovisores", icon: "ph-car-profile", trend: "down", trendValue: "-5%" },
-            { title: "Total Líneas", value: "485 uds", icon: "ph-list-numbers", trend: "up", trendValue: "+12%" }
-        ],
-        table: {
-            headers: ["Posición", "Pieza", "Familia", "Ventas (30d)", "Var. Mensual"],
-            rows: [
-                ["#1", "Faros Superiores", "Iluminación", "145", "+20%"],
-                ["#2", "Alternadores", "Mecánica", "112", "+15%"],
-                ["#3", "Retrovisores Ext.", "Carrocería", "98", "-5%"],
-                ["#4", "Pilotos Traseros", "Iluminación", "85", "+8%"],
-                ["#5", "Motores Diesel", "Mecánica", "45", "+3%"]
-            ]
-        },
-        conclusions: "<strong>1. Piezas de colisión:</strong> Faros y retrovisores tienen alta rotación por siniestros urbanos leves. Mantener stock mínimo de 100 uds.<br><br><strong>2. Electromecánica al alza:</strong> Alternadores suben +15%. Relacionado con auge de vehículos más antiguos en circulación.<br><br><strong>3. Acción:</strong> Aumentar reaprovisionamiento en faros y alternadores para las marcas del grupo VAG.",
-        relatedIds: ["ventas_mes", "stock_actual", "vehiculos_rentables"]
-    },
-
-    vehiculos_rentables: {
-        title: "Ranking de Vehículos Más Rentables",
-        summary: "He analizado el margen neto de cada vehículo procesado: precio de compra vs. suma de ventas de sus piezas. Los compactos europeos de 2015–2019 presentan el mejor ratio de rentabilidad.",
-        chartType: "bar",
-        chartConfig: {
-            labels: ["SEAT Leon '18", "VW Golf VII", "Peugeot 3008", "Toyota Auris", "Renault Megane"],
-            datasets: [{
-                label: 'Beneficio Neto (€)',
-                data: [4500, 3800, 3100, 2700, 2200],
-                backgroundColor: 'rgba(139, 92, 246, 0.7)',
-                borderColor: 'rgba(139, 92, 246, 1)',
-                borderWidth: 2,
-                borderRadius: 6
-            }]
-        },
-        metrics: [
-            { title: "Top ROI #1", value: "SEAT Leon '18", icon: "ph-car", trend: "up", trendValue: "+320%" },
-            { title: "Top ROI #2", value: "VW Golf VII", icon: "ph-car", trend: "up", trendValue: "+280%" },
-            { title: "Beneficio Medio", value: "3,260€", icon: "ph-currency-eur", trend: "up", trendValue: "+18%" },
-            { title: "Vehículos Analizados", value: "87", icon: "ph-garage", trend: "neutral", trendValue: "=" }
-        ],
-        table: {
-            headers: ["Vehículo", "Coste Compra", "Ventas de Piezas", "Beneficio Neto", "ROI"],
-            rows: [
-                ["SEAT Leon '18", "1,200€", "5,700€", "4,500€", "+320%"],
-                ["VW Golf VII", "1,800€", "5,600€", "3,800€", "+280%"],
-                ["Peugeot 3008", "2,100€", "5,200€", "3,100€", "+248%"],
-                ["Toyota Auris", "1,500€", "4,200€", "2,700€", "+180%"],
-                ["Renault Megane", "1,100€", "3,300€", "2,200€", "+200%"]
-            ]
-        },
-        conclusions: "<strong>1. ROI extraordinario en VAG:</strong> Los compactos del Grupo VAG presentan la mejor rentabilidad gracias a la altísima demanda de sus piezas de mecánica y transmisión.<br><br><strong>2. Estrategia de compra:</strong> Priorizar SEAT Leon y VW Golf de 2016–2019 en subasta. Mayor ROI garantizado.<br><br><strong>3. Evitar vehículos de lujo:</strong> Altos costes de compra y menor demanda de piezas en el mercado local.",
-        relatedIds: ["ventas_mes", "piezas_top", "stock_actual"]
-    },
-
-    piezas_muertas: {
-        title: "Piezas Sin Rotación — Más de 6 Meses",
-        summary: "He identificado todas las referencias del almacén con fecha de entrada anterior a 6 meses y sin registro de venta. El stock inmovilizado asciende a 34,200€ en 1,204 referencias.",
-        chartType: "bar",
-        chartConfig: {
-            labels: ["Asientos", "Cremalleras", "Puertas Tras.", "Módulos ABS", "Salpicaderos"],
-            datasets: [{
-                label: 'Unidades Sin Vender',
-                data: [420, 210, 185, 120, 95],
-                backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                borderColor: 'rgba(239, 68, 68, 1)',
-                borderWidth: 2,
-                borderRadius: 6
-            }]
-        },
-        metrics: [
-            { title: "Referencias Inactivas", value: "1,204", icon: "ph-warning-circle", trend: "up", trendValue: "+12%" },
-            { title: "Valor Inmovilizado", value: "34,200€", icon: "ph-money", trend: "neutral", trendValue: "0%" },
-            { title: "Categoría Crítica", value: "Asientos", icon: "ph-armchair", trend: "up", trendValue: "420 uds" },
-            { title: "Promedio Inactividad", value: "8.4 meses", icon: "ph-clock", trend: "up", trendValue: "+0.8m" }
-        ],
-        table: {
-            headers: ["Categoría", "Uds. Inactivas", "Valor Total", "Tiempo Medio"],
-            rows: [
-                ["Asientos Completos", "420", "12,600€", "8 meses"],
-                ["Cremalleras Dirección", "210", "8,400€", "7.5 meses"],
-                ["Puertas Traseras", "185", "7,400€", "6.2 meses"],
-                ["Módulos ABS", "120", "4,800€", "9 meses"],
-                ["Salpicaderos", "95", "1,900€", "6.5 meses"]
-            ]
-        },
-        conclusions: "<strong>1. Limpieza urgente:</strong> 12,600€ bloqueados en asientos completos sin rotación. Revisar catálogo de compatibilidades.<br><br><strong>2. Acción inmediata:</strong> Enviar piezas > 12 meses a chatarreros o exportar en lotes económicos al mercado internacional.<br><br><strong>3. Promoción activa:</strong> Publicar las cremalleras y módulos ABS en plataformas online especializadas con descuento del 30%.",
-        relatedIds: ["stock_actual", "piezas_top", "vehiculos_rentables"]
-    },
-
-    ventas_comparativa: {
-        title: "Comparativa de Ventas — Este Mes vs. Mes Anterior",
-        summary: "He comparado las métricas de ventas entre el período actual y el mes anterior de forma directa. Se observa una mejora en volumen y facturación.",
-        chartType: "bar",
-        chartConfig: {
-            labels: ["Motores", "Cajas Cambio", "Carrocería", "Iluminación", "Interior"],
-            datasets: [
-                {
-                    label: 'Mes Anterior',
-                    data: [9200, 8500, 5100, 3200, 1800],
-                    backgroundColor: 'rgba(148, 163, 184, 0.7)',
-                    borderColor: 'rgba(148, 163, 184, 1)',
-                    borderWidth: 2,
-                    borderRadius: 6
-                },
-                {
-                    label: 'Mes Actual',
-                    data: [10200, 10100, 6400, 4100, 2100],
-                    backgroundColor: 'rgba(37, 99, 235, 0.7)',
-                    borderColor: 'rgba(37, 99, 235, 1)',
-                    borderWidth: 2,
-                    borderRadius: 6
-                }
-            ]
-        },
-        metrics: [
-            { title: "Var. Facturación", value: "+15.2%", icon: "ph-trend-up", trend: "up", trendValue: "+15.2%" },
-            { title: "Var. Unidades", value: "+8.3%", icon: "ph-shopping-cart", trend: "up", trendValue: "+8.3%" },
-            { title: "Mejor Categoría", value: "Cajas Cambio", icon: "ph-gear", trend: "up", trendValue: "+19%" },
-            { title: "Menor Crecimiento", value: "Interior", icon: "ph-armchair", trend: "up", trendValue: "+4%" }
-        ],
-        table: {
-            headers: ["Categoría", "Mes Anterior (€)", "Mes Actual (€)", "Variación"],
-            rows: [
-                ["Motores", "9,200€", "10,200€", "+10.9%"],
-                ["Cajas de Cambio", "8,500€", "10,100€", "+18.8%"],
-                ["Carrocería", "5,100€", "6,400€", "+25.5%"],
-                ["Iluminación", "3,200€", "4,100€", "+28.1%"],
-                ["Interior", "1,800€", "2,100€", "+16.7%"]
-            ]
-        },
-        conclusions: "<strong>1. Crecimiento general:</strong> Todas las categorías muestran crecimiento respecto al mes anterior.<br><br><strong>2. Iluminación destaca:</strong> Crecimiento del 28% en iluminación —el mayor de todos los segmentos. Potenciar stock.<br><br><strong>3. Recomendación:</strong> Mantener estrategia actual y reforzar aprovisionamiento en cajas de cambio y carrocería, que son las que más volumen mueven.",
-        relatedIds: ["ventas_mes", "piezas_top", "vehiculos_rentables"]
-    },
-
-    tendencia_ventas: {
-        title: "Tendencia de Ventas — Últimos 6 Meses",
-        summary: "He analizado la evolución de las ventas en el semestre. Se aprecia una curva ascendente sostenida con un ligero valle en enero. La tendencia para los próximos meses es positiva.",
-        chartType: "line",
-        chartConfig: {
-            labels: ["Octubre", "Noviembre", "Diciembre", "Enero", "Febrero", "Marzo"],
-            datasets: [{
-                label: 'Facturación (€)',
-                data: [28000, 32000, 38000, 25000, 35000, 45230],
-                borderColor: 'rgba(37, 99, 235, 1)',
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                fill: true,
-                tension: 0.4,
-                borderWidth: 3,
-                pointRadius: 6,
-                pointBackgroundColor: 'rgba(37, 99, 235, 1)'
-            }]
-        },
-        metrics: [
-            { title: "Tendencia Global", value: "+61.5%", icon: "ph-trend-up", trend: "up", trendValue: "6m" },
-            { title: "Mejor Mes", value: "Marzo", icon: "ph-star", trend: "up", trendValue: "45,230€" },
-            { title: "Media Mensual", value: "33,872€", icon: "ph-chart-bar", trend: "up", trendValue: "+8%" },
-            { title: "Valle", value: "Enero", icon: "ph-trend-down", trend: "down", trendValue: "25,000€" }
-        ],
-        table: {
-            headers: ["Mes", "Facturación (€)", "Var. Mensual", "Acumulado"],
-            rows: [
-                ["Octubre", "28,000€", "—", "28,000€"],
-                ["Noviembre", "32,000€", "+14.3%", "60,000€"],
-                ["Diciembre", "38,000€", "+18.7%", "98,000€"],
-                ["Enero", "25,000€", "-34.2%", "123,000€"],
-                ["Febrero", "35,000€", "+40%", "158,000€"],
-                ["Marzo", "45,230€", "+29.2%", "203,230€"]
-            ]
-        },
-        conclusions: "<strong>1. Pauta estacional:</strong> El valle de enero es normal en el sector. La tendencia anual es claramente positiva.<br><br><strong>2. Diciembre fuerte:</strong> La campaña de diciembre fue rentable. Replicar estrategia en 2026.<br><br><strong>3. Proyección:</strong> Si se mantiene el ritmo de marzo, la facturación anual superará los 540,000€.",
-        relatedIds: ["ventas_comparativa", "ventas_mes", "vehiculos_rentables"]
-    },
-
-    default: {
-        title: "Análisis Generado por Analista IA",
-        summary: "He procesado tu consulta y preparado este resumen personalizado basado en los datos operativos del sistema de desguaces.",
-        chartType: "bar",
-        chartConfig: {
-            labels: ["Categoría A", "Categoría B", "Categoría C", "Categoría D"],
-            datasets: [{
-                label: 'Valores Analizados',
-                data: [42, 28, 35, 50],
-                backgroundColor: 'rgba(16, 185, 129, 0.7)',
-                borderColor: 'rgba(16, 185, 129, 1)',
-                borderWidth: 2,
-                borderRadius: 6
-            }]
-        },
-        metrics: [
-            { title: "Registros Procesados", value: "12,450", icon: "ph-database", trend: "up", trendValue: "100%" }
-        ],
-        table: {
-            headers: ["Indicador", "Valor", "Estado"],
-            rows: [
-                ["Sistema operativo", "OK", "✅"],
-                ["Datos disponibles", "12,450 registros", "✅"],
-                ["Última sincronización", "Hace 2 min", "✅"]
-            ]
-        },
-        conclusions: "<strong>Consulta Procesada:</strong> No he encontrado una plantilla exacta para tu petición, pero puedo generar cualquier informe si especificas más detalles. Prueba: <em>\"Ventas de este mes\"</em>, <em>\"Stock por familia\"</em>, <em>\"Piezas que no se venden\"</em>.",
-        relatedIds: ["ventas_mes", "stock_actual", "piezas_top"]
+async function initDataEngine() {
+    try {
+        const [v, p, ve] = await Promise.all([
+            loadCSV('vehiculos.csv'),
+            loadCSV('piezas.csv'),
+            loadCSV('ventas.csv')
+        ]);
+        DB.vehiculos = v;
+        DB.piezas = p;
+        DB.ventas = ve;
+        onDataReady();
+    } catch(e) {
+        console.warn('CSVs no disponibles, usando datos de demostración.');
+        useDemoData();
+        onDataReady();
     }
+}
+
+function useDemoData() {
+    const marcas = ['BMW', 'Audi', 'Ford', 'Seat', 'Toyota'];
+    const modelos = {'BMW':['3 Series','X3'],'Audi':['A3','Q5'],'Ford':['Focus','Kuga'],'Seat':['Leon','Ibiza'],'Toyota':['Corolla','Yaris']};
+    const familias = ['Motor', 'Frenos', 'Suspensión', 'Electricidad', 'Carrocería', 'Ruedas', 'Interior'];
+    const names = {'Motor':['Motor 1.6','Caja de cambios','Turbo'],'Frenos':['Freno delantero','Disco de freno'],'Suspensión':['Amortiguador','Muelle'],'Electricidad':['Batería 12V','Alternador'],'Carrocería':['Puerta','Capó','Retrovisor'],'Ruedas':['Llanta Aleación','Neumático'],'Interior':['Volante','Asiento']};
+    const canales = ['Recambio Verde','eBay','Wallapop','Recambio Azul','Ovoko'];
+    const rndDate = () => { const d = new Date(2025, Math.floor(Math.random()*14), Math.floor(Math.random()*28)+1); return d.toISOString().split('T')[0]; };
+    const rnd = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+    for (let i = 1; i <= 100; i++) {
+        const m = marcas[rnd(0,4)];
+        DB.vehiculos.push({ id_vehiculo: String(i), marca: m, modelo: modelos[m][rnd(0,1)], fecha_entrada: rndDate(), coste_compra: String(rnd(500,3000)) });
+    }
+    for (let i = 1; i <= 500; i++) {
+        const fam = familias[rnd(0,6)];
+        const prices = {'Motor':rnd(200,800),'Frenos':rnd(40,120),'Suspensión':rnd(60,150),'Electricidad':rnd(30,200),'Carrocería':rnd(50,400),'Ruedas':rnd(20,100),'Interior':rnd(20,150)};
+        DB.piezas.push({ id_pieza: String(i), nombre: names[fam][rnd(0,names[fam].length-1)], familia: fam, vehiculo_id: String(rnd(1,100)), precio: String(prices[fam]), canal_venta: canales[rnd(0,4)], stock_disponible: String(rnd(1,50)) });
+    }
+    const sampled = DB.piezas.slice(0, 200);
+    let saleId = 1;
+    sampled.forEach(p => {
+        const times = rnd(1, 3);
+        for (let j = 0; j < times; j++) {
+            DB.ventas.push({ id_venta: String(saleId++), pieza_id: p.id_pieza, fecha_venta: rndDate(), precio_venta: String((parseFloat(p.precio) * (0.9 + Math.random()*0.2)).toFixed(2)), canal_venta: canales[rnd(0,4)] });
+        }
+    });
+}
+
+function onDataReady() {
+    updateDashboardKPIs();
+    renderWidgetThumbnails();
+    generateAutoInsights();
+    updateRecommendations();
+    setInterval(updateRecommendations, 30000);
+}
+
+// =====================================================
+// 2. NAVEGACIÓN SPA
+// =====================================================
+const VIEWS = { dashboard: 'view-dashboard', vehiculos: 'view-vehiculos', recambios: 'view-recambios', ventas: 'view-ventas', bi: 'view-bi' };
+const NAV_TITLES = {
+    dashboard: ['Dashboard', 'Resumen general del negocio'],
+    vehiculos: ['Vehículos', 'Listado y gestión de vehículos'],
+    recambios: ['Recambios', 'Catálogo de piezas y stock'],
+    ventas: ['Historial de Ventas', 'Registro de todas las transacciones'],
+    bi: ['Inteligencia IA', 'Analista IA del Desguace']
+};
+
+function navigateTo(view) {
+    currentView = view;
+    Object.values(VIEWS).forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+    const target = document.getElementById(VIEWS[view]);
+    if (target) target.classList.remove('hidden');
+
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navEl = document.getElementById('nav-' + view);
+    if (navEl) navEl.classList.add('active');
+
+    document.getElementById('pageTitle').textContent = NAV_TITLES[view][0];
+    document.getElementById('pageSubtitle').textContent = NAV_TITLES[view][1];
+
+    if (view === 'dashboard') renderDashboard();
+    else if (view === 'vehiculos') renderVehiculos();
+    else if (view === 'recambios') renderRecambios();
+    else if (view === 'ventas') renderVentas();
+}
+
+['dashboard', 'vehiculos', 'recambios', 'ventas', 'bi'].forEach(v => {
+    const el = document.getElementById('nav-' + v);
+    if (el) el.addEventListener('click', (e) => { e.preventDefault(); navigateTo(v); });
+});
+
+// =====================================================
+// 3. DASHBOARD — KPIs y gráficos
+// =====================================================
+let dashCharts = {};
+function updateDashboardKPIs() {
+    const totalIngresos = DB.ventas.reduce((s, v) => s + parseFloat(v.precio_venta || 0), 0);
+    const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+    el('kpiVehiculos', DB.vehiculos.length);
+    el('kpiPiezas', DB.piezas.length);
+    el('kpiIngresos', formatEur(totalIngresos));
+    el('kpiVentas', DB.ventas.length);
+}
+
+function renderDashboard() {
+    updateDashboardKPIs();
+    // Canal chart
+    const canalTotals = {};
+    DB.ventas.forEach(v => { canalTotals[v.canal_venta] = (canalTotals[v.canal_venta] || 0) + parseFloat(v.precio_venta || 0); });
+    const cLabels = Object.keys(canalTotals), cVals = Object.values(canalTotals);
+    renderDashChart('dashCanalChart', 'bar', cLabels, [{data: cVals, backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444'], borderRadius: 6}]);
+
+    // Familia chart
+    const famTotals = {};
+    DB.piezas.forEach(p => { famTotals[p.familia] = (famTotals[p.familia] || 0) + 1; });
+    renderDashChart('dashFamiliaChart', 'doughnut', Object.keys(famTotals), [{data: Object.values(famTotals), backgroundColor: ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'], borderWidth: 0}]);
+
+    // Monthly ingresos
+    const months = Array.from({length: 12}, (_, i) => i + 1);
+    const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const monthData = months.map(m => DB.ventas.filter(v => { const d = new Date(v.fecha_venta); return d.getMonth() + 1 === m && d.getFullYear() === 2025; }).reduce((s, v) => s + parseFloat(v.precio_venta || 0), 0));
+    renderDashChart('dashIngresosChart', 'line', monthLabels, [{data: monthData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.4, pointRadius: 4}]);
+}
+
+function renderDashChart(canvasId, type, labels, datasets) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (dashCharts[canvasId]) dashCharts[canvasId].destroy();
+    const opts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type === 'doughnut' ? 'right' : 'bottom', labels: { font: { size: 12 } } } } };
+    if (type === 'bar' || type === 'line') opts.scales = { y: { beginAtZero: true, ticks: { callback: v => formatEur(v) } } };
+    if (type === 'doughnut') opts.cutout = '60%';
+    dashCharts[canvasId] = new Chart(canvas.getContext('2d'), { type, data: { labels, datasets }, options: opts });
+}
+
+// =====================================================
+// 4. VISTA VEHÍCULOS
+// =====================================================
+function renderVehiculos() {
+    applyVehiculosFilters();
+    document.getElementById('vehiculoSearch').addEventListener('input', applyVehiculosFilters);
+    document.getElementById('vehiculoFechaDesde').addEventListener('change', applyVehiculosFilters);
+    document.getElementById('vehiculoFechaHasta').addEventListener('change', applyVehiculosFilters);
+    document.getElementById('vehiculoResetFilters').addEventListener('click', () => {
+        document.getElementById('vehiculoSearch').value = '';
+        document.getElementById('vehiculoFechaDesde').value = '';
+        document.getElementById('vehiculoFechaHasta').value = '';
+        applyVehiculosFilters();
+    });
+}
+function applyVehiculosFilters() {
+    const q = document.getElementById('vehiculoSearch').value.toLowerCase();
+    const fd = document.getElementById('vehiculoFechaDesde').value;
+    const fh = document.getElementById('vehiculoFechaHasta').value;
+    let data = DB.vehiculos.filter(v => {
+        const match = !q || v.marca.toLowerCase().includes(q) || v.modelo.toLowerCase().includes(q);
+        const d = v.fecha_entrada;
+        const okFrom = !fd || d >= fd;
+        const okTo = !fh || d <= fh;
+        return match && okFrom && okTo;
+    });
+    pagination.vehiculos = 1;
+    renderTable('vehiculoTableBody', data, ['id_vehiculo','marca','modelo','fecha_entrada','coste_compra'], 'vehiculo', data.length);
+}
+function renderTable(tbodyId, data, cols, key, total) {
+    const page = pagination[key] || 1;
+    const start = (page - 1) * PAGE_SIZE;
+    const paged = data.slice(start, start + PAGE_SIZE);
+    const tbody = document.getElementById(tbodyId);
+    const count = document.getElementById(key + 'Count');
+    if (count) count.textContent = `${total} registros`;
+    if (!tbody) return;
+    tbody.innerHTML = paged.map(row => '<tr>' + cols.map(c => {
+        let val = row[c] || '';
+        if (c === 'coste_compra' || c === 'precio' || c === 'precio_venta') val = formatEur(parseFloat(val));
+        if (c === 'familia') val = `<span class="badge badge-familia">${val}</span>`;
+        if (c === 'canal_venta') val = `<span class="badge badge-canal">${val}</span>`;
+        if (c === 'stock_disponible') val = `<span class="badge ${parseInt(val) < 5 ? 'badge-low' : 'badge-ok'}">${val}</span>`;
+        return `<td>${val}</td>`;
+    }).join('') + '</tr>').join('');
+    renderPagination(key, data.length, page);
+}
+function renderPagination(key, total, current) {
+    const pbar = document.getElementById(key + 'Pagination');
+    if (!pbar) return;
+    const pages = Math.ceil(total / PAGE_SIZE);
+    if (pages <= 1) { pbar.innerHTML = ''; return; }
+    pbar.innerHTML = `<span>Página ${current} de ${pages}</span>
+        ${current > 1 ? `<button class="pg-btn" onclick="goPage('${key}',${current-1})">‹ Anterior</button>` : ''}
+        ${current < pages ? `<button class="pg-btn" onclick="goPage('${key}',${current+1})">Siguiente ›</button>` : ''}`;
+}
+window.goPage = function(key, page) {
+    pagination[key] = page;
+    if (key === 'vehiculos') applyVehiculosFilters();
+    else if (key === 'recambios') applyRecambiosFilters();
+    else if (key === 'ventas') applyVentasFilters();
 };
 
 // =====================================================
-// MOTOR NLP: Interpreta el prompt del usuario
+// 5. VISTA RECAMBIOS
 // =====================================================
-function interpretPrompt(promptLower) {
-    // --- Ventas comparativas ---
-    if ((promptLower.includes('compar') || promptLower.includes('vs') || promptLower.includes('versus') || promptLower.includes('frente')) &&
-        (promptLower.includes('venta') || promptLower.includes('mes') || promptLower.includes('factura'))) {
-        return { key: 'ventas_comparativa', widgetId: 'ventas_comparativa' };
-    }
-    // --- Tendencia temporal ---
-    if (promptLower.includes('tendencia') || promptLower.includes('evoluc') || promptLower.includes('6 meses') ||
-        promptLower.includes('semest') || promptLower.includes('históri') || promptLower.includes('mes a mes')) {
-        return { key: 'tendencia_ventas', widgetId: 'ventas_mes' };
-    }
-    // --- Ventas del mes / período ---
-    if (promptLower.includes('venta') && (promptLower.includes('mes') || promptLower.includes('actual') ||
-        promptLower.includes('febrero') || promptLower.includes('marzo') || promptLower.includes('enero') ||
-        promptLower.includes('informe de venta') || promptLower.includes('resumen de venta'))) {
-        return { key: 'ventas_mes', widgetId: 'ventas_mes' };
-    }
-    // --- Stock e inventario ---
-    if (promptLower.includes('stock') || promptLower.includes('inventario') || promptLower.includes('almacén') ||
-        (promptLower.includes('familia') && promptLower.includes('pieza')) ||
-        (promptLower.includes('stock') && promptLower.includes('motores'))) {
-        return { key: 'stock_actual', widgetId: 'stock_actual' };
-    }
-    // --- Piezas más vendidas / ranking ---
-    if ((promptLower.includes('pieza') || promptLower.includes('recambio')) &&
-        (promptLower.includes('más vendid') || promptLower.includes('ranking') || promptLower.includes('rotaci') ||
-         promptLower.includes('venden más') || promptLower.includes('mejor') || promptLower.includes('top'))) {
-        return { key: 'piezas_top', widgetId: 'piezas_top' };
-    }
-    // --- Vehículos rentables ---
-    if ((promptLower.includes('vehículo') || promptLower.includes('vehiculo') || promptLower.includes('coche') || promptLower.includes('modelo')) &&
-        (promptLower.includes('rentable') || promptLower.includes('beneficio') || promptLower.includes('margen') || promptLower.includes('roi'))) {
-        return { key: 'vehiculos_rentables', widgetId: 'vehiculos_rentables' };
-    }
-    // --- Piezas sin rotación / muertas ---
-    if ((promptLower.includes('sin vender') || promptLower.includes('sin rotaci') || promptLower.includes('mucho tiempo') ||
-         promptLower.includes('6 meses') || promptLower.includes('inactiv') || promptLower.includes('parad') ||
-         (promptLower.includes('pieza') && promptLower.includes('no se vend')))) {
-        return { key: 'piezas_muertas', widgetId: 'piezas_muertas' };
-    }
-    // --- Fallback a ventas genéricas ---
-    if (promptLower.includes('venta') || promptLower.includes('factura')) {
-        return { key: 'ventas_mes', widgetId: 'ventas_mes' };
-    }
-    return { key: 'default', widgetId: 'default' };
+function renderRecambios() {
+    applyRecambiosFilters();
+    document.getElementById('recambioSearch').addEventListener('input', applyRecambiosFilters);
+    document.getElementById('recambioFamilia').addEventListener('change', applyRecambiosFilters);
+    document.getElementById('recambioCanal').addEventListener('change', applyRecambiosFilters);
+    document.getElementById('recambioResetFilters').addEventListener('click', () => {
+        document.getElementById('recambioSearch').value = '';
+        document.getElementById('recambioFamilia').value = '';
+        document.getElementById('recambioCanal').value = '';
+        applyRecambiosFilters();
+    });
+}
+function applyRecambiosFilters() {
+    const q = document.getElementById('recambioSearch').value.toLowerCase();
+    const fam = document.getElementById('recambioFamilia').value;
+    const canal = document.getElementById('recambioCanal').value;
+    let data = DB.piezas.filter(p => {
+        const match = !q || p.nombre.toLowerCase().includes(q) || p.id_pieza.includes(q);
+        return match && (!fam || p.familia === fam) && (!canal || p.canal_venta === canal);
+    });
+    pagination.recambios = 1;
+    renderTable('recambioTableBody', data, ['id_pieza','nombre','familia','precio','canal_venta','stock_disponible'], 'recambio', data.length);
 }
 
 // =====================================================
-// SELECCIÓN AUTOMÁTICA DE TIPO DE GRÁFICO
+// 6. VISTA VENTAS
 // =====================================================
-function resolveChartType(dataKey, promptLower) {
-    // Keyword overrides from user prompt
-    if (promptLower.includes('circular') || promptLower.includes('quesito') || promptLower.includes('distribuci'))
-        return 'doughnut';
-    if (promptLower.includes('línea') || promptLower.includes('linea') || promptLower.includes('tendencia') || promptLower.includes('evoluc'))
-        return 'line';
-    if (promptLower.includes('ranking') || promptLower.includes('horizontal') || promptLower.includes('barras horizontales'))
-        return 'bar-horizontal';
-    if (promptLower.includes('listado'))
-        return 'none';
-    if (promptLower.includes('compar'))
-        return 'bar';
-
-    // Fall back to the AI data's built-in chart type
-    const d = aiKnowledgeBase[dataKey];
-    return d ? (d.chartType || 'bar') : 'bar';
+function renderVentas() {
+    applyVentasFilters();
+    document.getElementById('ventaSearch').addEventListener('input', applyVentasFilters);
+    document.getElementById('ventaCanal').addEventListener('change', applyVentasFilters);
+    document.getElementById('ventaFechaDesde').addEventListener('change', applyVentasFilters);
+    document.getElementById('ventaFechaHasta').addEventListener('change', applyVentasFilters);
+    document.getElementById('ventaResetFilters').addEventListener('click', () => {
+        document.getElementById('ventaSearch').value = '';
+        document.getElementById('ventaCanal').value = '';
+        document.getElementById('ventaFechaDesde').value = '';
+        document.getElementById('ventaFechaHasta').value = '';
+        applyVentasFilters();
+    });
+}
+function applyVentasFilters() {
+    const q = document.getElementById('ventaSearch').value.toLowerCase();
+    const canal = document.getElementById('ventaCanal').value;
+    const fd = document.getElementById('ventaFechaDesde').value;
+    const fh = document.getElementById('ventaFechaHasta').value;
+    let data = DB.ventas.filter(v => {
+        const match = !q || v.pieza_id.includes(q) || v.canal_venta.toLowerCase().includes(q);
+        const d = v.fecha_venta;
+        return match && (!canal || v.canal_venta === canal) && (!fd || d >= fd) && (!fh || d <= fh);
+    });
+    const total = data.reduce((s, v) => s + parseFloat(v.precio_venta || 0), 0);
+    const tv = document.getElementById('ventaTotalValue');
+    if (tv) tv.textContent = formatEur(total);
+    pagination.ventas = 1;
+    renderTable('ventaTableBody', data, ['id_venta','pieza_id','fecha_venta','precio_venta','canal_venta'], 'venta', data.length);
 }
 
 // =====================================================
-// WIDGETS RELACIONADOS (sugerencias post-informe)
+// 7. AUTO-INSIGHTS desde datos reales
 // =====================================================
-const widgetCatalog = [
-    {
-        id: "ventas_mes",
-        title: "Ventas del mes",
-        desc: "resumen de ventas actuales",
-        prompt: "Genera un informe de todas las ventas realizadas durante el mes actual, mostrando número total de ventas, facturación total, piezas más vendidas, y miniatura de gráfico de barras.",
-        chartType: "bar",
-        chartData: { labels: ['S1', 'S2', 'S3', 'S4'], datasets: [{ data: [10, 12, 9, 14], backgroundColor: '#3b82f6', borderRadius: 4 }] }
-    },
-    {
-        id: "stock_actual",
-        title: "Stock actual",
-        desc: "distribución del inventario por familia",
-        prompt: "Muestra el stock disponible agrupado por familia, incluyendo miniatura de gráfico circular.",
-        chartType: "doughnut",
-        chartData: { labels: ['Mec.', 'Car.', 'Int.', 'Elec.'], datasets: [{ data: [40, 30, 15, 15], backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'], borderWidth: 0 }] }
-    },
-    {
-        id: "piezas_top",
-        title: "Piezas más vendidas",
-        desc: "ranking de piezas con mayor rotación",
-        prompt: "Genera ranking de piezas más vendidas últimos 30 días, miniatura de gráfico de barras horizontales.",
-        chartType: "bar",
-        chartData: { labels: ['Faros', 'Alt.', 'Retro.', 'Pil.'], datasets: [{ data: [30, 22, 18, 12], backgroundColor: '#10b981', borderRadius: 4 }] }
-    },
-    {
-        id: "vehiculos_rentables",
-        title: "Vehículos más rentables",
-        desc: "beneficio por vehículo",
-        prompt: "Analiza beneficio generado por cada vehículo y muestra los más rentables, incluyendo miniatura de gráfico de barras.",
-        chartType: "bar",
-        chartData: { labels: ['SEAT', 'VW', 'Peu.'], datasets: [{ data: [45, 38, 31], backgroundColor: '#8b5cf6', borderRadius: 4 }] }
-    },
-    {
-        id: "piezas_muertas",
-        title: "Piezas sin rotación",
-        desc: "piezas que no se venden",
-        prompt: "Identifica piezas con más de 6 meses sin vender, miniatura de tabla o gráfico de barras.",
-        chartType: "bar",
-        chartData: { labels: ['Asientos', 'Crem.', 'Puertas'], datasets: [{ data: [42, 21, 18], backgroundColor: '#ef4444', borderRadius: 4 }] }
-    },
-    {
-        id: "ventas_comparativa",
-        title: "Comparativa de ventas",
-        desc: "este mes vs. mes anterior",
-        prompt: "Comparativa de ventas este mes vs mes anterior por categoría.",
-        chartType: "bar",
-        chartData: { labels: ['Mot.', 'Caj.', 'Car.'], datasets: [{ data: [9, 8, 5], backgroundColor: '#94a3b8', borderRadius: 4 }, { data: [10, 10, 6], backgroundColor: '#3b82f6', borderRadius: 4 }] }
-    },
-    {
-        id: "tendencia_ventas",
-        title: "Tendencia de ventas",
-        desc: "evolución en los últimos 6 meses",
-        prompt: "Muéstrame la tendencia de ventas en los últimos 6 meses.",
-        chartType: "line",
-        chartData: { labels: ['Oct', 'Nov', 'Dic', 'Ene', 'Feb', 'Mar'], datasets: [{ data: [28, 32, 38, 25, 35, 45], borderColor: '#3b82f6', backgroundColor: 'rgba(37,99,235,0.1)', fill: true, tension: 0.4 }] }
-    }
-];
+function generateAutoInsights() {
+    const totalIngresos = DB.ventas.reduce((s, v) => s + parseFloat(v.precio_venta || 0), 0);
+    const canalTotals = {};
+    DB.ventas.forEach(v => { canalTotals[v.canal_venta] = (canalTotals[v.canal_venta] || 0) + parseFloat(v.precio_venta || 0); });
+    const topCanal = Object.entries(canalTotals).sort((a,b) => b[1]-a[1])[0] || ['—', 0];
+    const pct = totalIngresos > 0 ? ((topCanal[1] / totalIngresos) * 100).toFixed(0) : 0;
 
-// =====================================================
-// RECOMENDACIONES AUTOMÁTICAS DE NEGOCIO IA
-// =====================================================
-const aiInsights = [
-    { text: "Los motores de BMW tienen alta demanda este mes (+15% vs mes anterior).", icon: "ph-trend-up", type: "up" },
-    { text: "Las cajas de cambio Volkswagen presentan alta rotación — stock menor a 5 días.", icon: "ph-arrows-clockwise", type: "up" },
-    { text: "Alerta: 12 referencias de asientos con más de 8 meses sin vender.", icon: "ph-warning-circle", type: "warn" },
-    { text: "El ticket medio ha subido a 132€ impulsado por ventas de carrocería frontal.", icon: "ph-currency-eur", type: "up" },
-    { text: "Oportunidad: SEAT León '18 genera un ROI del 320% sobre coste de compra.", icon: "ph-car", type: "up" },
-    { text: "Stock bajo en alternadores compatibles con grupo VAG — reaprovisionar.", icon: "ph-lightning", type: "warn" },
-    { text: "Las piezas de iluminación tienen el mejor margen del mes: 60%.", icon: "ph-lightbulb", type: "up" },
-    { text: "34,200€ inmovilizados en piezas sin rotación. Se recomienda revisión urgente.", icon: "ph-money", type: "warn" },
-    { text: "Carrocería frontal: +25% de ventas respecto al mes anterior.", icon: "ph-trend-up", type: "up" }
-];
+    const piezaCount = {};
+    DB.ventas.forEach(v => { piezaCount[v.pieza_id] = (piezaCount[v.pieza_id] || 0) + 1; });
+    const topPiezaId = Object.entries(piezaCount).sort((a,b) => b[1]-a[1])[0]?.[0];
+    const topPieza = DB.piezas.find(p => p.id_pieza === topPiezaId);
+
+    const soldIds = new Set(DB.ventas.map(v => v.pieza_id));
+    const sinVender = DB.piezas.filter(p => !soldIds.has(p.id_pieza));
+    const valorSinVender = sinVender.reduce((s, p) => s + parseFloat(p.precio || 0) * parseInt(p.stock_disponible || 1), 0);
+
+    const stockBajo = DB.piezas.filter(p => parseInt(p.stock_disponible) < 5).length;
+
+    const insights = [
+        { icon: 'ph-trend-up', type: 'up', text: `Canal <strong>${topCanal[0]}</strong> genera el <strong>${pct}%</strong> de los ingresos totales.`, prompt: `Analiza las ventas por canal de venta y muestra ranking con tabla y gráfico circular.` },
+        { icon: 'ph-currency-eur', type: 'warn', text: `<strong>${formatEur(valorSinVender)}</strong> inmovilizados en ${sinVender.length} piezas sin ninguna venta.`, prompt: `Identifica todas las piezas sin vender, agrúpalas por familia y muestra tabla y gráfico de barras.` },
+        { icon: 'ph-package', type: 'up', text: `Pieza más vendida: <strong>${topPieza ? topPieza.nombre : '—'}</strong> con ${piezaCount[topPiezaId] || 0} ventas registradas.`, prompt: `Genera el ranking de las 10 piezas más vendidas con tabla y gráfico de barras horizontales.` },
+        { icon: 'ph-warning-circle', type: 'warn', text: `<strong>${stockBajo}</strong> referencias con stock crítico (menos de 5 unidades).`, prompt: `Muestra las piezas con stock menor a 5 unidades agrupadas por familia con tabla y gráfico.` },
+        { icon: 'ph-currency-eur', type: 'up', text: `Ingresos totales registrados: <strong>${formatEur(totalIngresos)}</strong> en ${DB.ventas.length} operaciones.`, prompt: `Muestra evolución mensual de ingresos en 2025 con gráfico de líneas y tabla resumen.` }
+    ];
+    window._autoInsights = insights;
+}
 
 function updateRecommendations() {
     const box = document.getElementById('recommendationsList');
-    if (!box) return;
-    const shuffled = [...aiInsights].sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, 3);
+    if (!box || !window._autoInsights) return;
+    const shuffled = [...window._autoInsights].sort(() => 0.5 - Math.random()).slice(0, 3);
     box.innerHTML = '';
-    selected.forEach(insight => {
+    shuffled.forEach(insight => {
         const item = document.createElement('div');
-        item.className = 'recommendation-item';
-        const timeStr = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        const typeColor = insight.type === 'warn' ? 'border-left-color: #f59e0b; background-color: #fffbeb;' : '';
-        item.setAttribute('style', typeColor);
-        item.innerHTML = `
-            <i class="ph-fill ${insight.icon}"></i>
-            <div>
-                <p class="recommendation-text">${insight.text}</p>
-                <span class="recommendation-time">Analizado a las ${timeStr}</span>
-            </div>
-        `;
+        item.className = 'recommendation-item clickable';
+        const typeStyle = insight.type === 'warn' ? 'border-left-color:#f59e0b;background-color:#fffbeb;' : '';
+        item.setAttribute('style', typeStyle + 'cursor:pointer;');
+        item.title = 'Haz clic para ver el informe completo';
+        item.innerHTML = `<i class="ph-fill ${insight.icon}"></i><div><p class="recommendation-text">${insight.text}</p><span class="recommendation-time">Haz clic para ver el informe</span></div>`;
+        item.onclick = () => triggerQuickReport(insight.prompt);
         box.appendChild(item);
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    updateRecommendations();
-    setInterval(updateRecommendations, 30000);
-    renderWidgetThumbnails();
-});
+// =====================================================
+// 8. AI ENGINE — Prompts e Informes
+// =====================================================
+const COLORES = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
 
-// =====================================================
-// THUMBNAILS DE WIDGETS
-// =====================================================
-function renderWidgetThumbnails() {
-    const thumbMap = {
-        thumbVentas: widgetCatalog.find(w => w.id === 'ventas_mes'),
-        thumbStock: widgetCatalog.find(w => w.id === 'stock_actual'),
-        thumbPiezasTop: widgetCatalog.find(w => w.id === 'piezas_top'),
-        thumbVehiculosRentables: widgetCatalog.find(w => w.id === 'vehiculos_rentables'),
-        thumbPiezasMuertas: widgetCatalog.find(w => w.id === 'piezas_muertas')
+function interpretPrompt(pl) {
+    if (pl.includes('canal') || pl.includes('plataform')) return buildCanalReport(pl);
+    if (pl.includes('familia') || pl.includes('categor')) return buildFamiliaReport(pl);
+    if ((pl.includes('pieza') || pl.includes('recambio')) && (pl.includes('top') || pl.includes('más vend') || pl.includes('ranking') || pl.includes('más vendid'))) return buildTopPiezasReport(pl);
+    if (pl.includes('sin vender') || pl.includes('sin rotac') || pl.includes('inactiv') || pl.includes('parad')) return buildSinVenderReport(pl);
+    if (pl.includes('stock') || pl.includes('inventari')) return buildStockReport(pl);
+    if (pl.includes('vehículo') || pl.includes('vehiculo') || pl.includes('rentable') || pl.includes('margen')) return buildVehiculosReport(pl);
+    if (pl.includes('mes') || pl.includes('mensual') || pl.includes('evoluc') || pl.includes('tendencia') || pl.includes('tiempo')) return buildMensualReport(pl);
+    if (pl.includes('venta') || pl.includes('factura') || pl.includes('ingres')) return buildVentasReport(pl);
+    return buildVentasReport(pl); // fallback
+}
+
+function buildVentasReport(pl) {
+    const canalTotals = {};
+    DB.ventas.forEach(v => { canalTotals[v.canal_venta] = (canalTotals[v.canal_venta] || 0) + parseFloat(v.precio_venta || 0); });
+    const rows = Object.entries(canalTotals).sort((a,b) => b[1]-a[1]);
+    const total = rows.reduce((s,[,v]) => s+v, 0);
+    return {
+        title: 'Informe de Ventas',
+        summary: `Se han registrado ${DB.ventas.length} ventas con un total de ${formatEur(total)}.`,
+        metrics: [
+            { title: 'Total ventas', value: DB.ventas.length, icon: 'ph-shopping-cart', trend:'up', trendValue:'+100%' },
+            { title: 'Ingresos', value: formatEur(total), icon: 'ph-currency-eur', trend:'up', trendValue:'Acumulado' }
+        ],
+        table: { headers: ['Canal','Total (€)','% del total'], rows: rows.map(([c,v]) => [c, formatEur(v), ((v/total)*100).toFixed(1)+'%']) },
+        chartConfig: { labels: rows.map(r=>r[0]), datasets: [{ label:'Ingresos', data: rows.map(r=>r[1].toFixed(2)), backgroundColor: COLORES, borderRadius:6 }] },
+        chartType: 'bar',
+        conclusions: `El canal <strong>${rows[0]?.[0]}</strong> es el más rentable. Diversificar la presencia en todos los canales es clave.`,
+        relatedIds: ['stock_actual', 'piezas_top']
     };
+}
 
-    for (const [canvasId, widget] of Object.entries(thumbMap)) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas || !widget) continue;
-        const ctx = canvas.getContext('2d');
-        const options = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { enabled: false } },
-            animation: { duration: 700 },
-            scales: {}
-        };
-        let type = widget.chartType;
-        if (type === 'bar-horizontal') { type = 'bar'; options.indexAxis = 'y'; }
-        if (type !== 'doughnut' && type !== 'pie' && type !== 'line') {
-            options.scales = { x: { display: false }, y: { display: false } };
-        }
-        new Chart(ctx, { type: type === 'line' ? 'line' : (type === 'doughnut' ? 'doughnut' : 'bar'), data: widget.chartData, options });
+function buildCanalReport(pl) { return buildVentasReport(pl); }
+
+function buildTopPiezasReport(pl) {
+    const piezaCount = {};
+    DB.ventas.forEach(v => { piezaCount[v.pieza_id] = (piezaCount[v.pieza_id] || 0) + 1; });
+    const top = Object.entries(piezaCount).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const rows = top.map(([id, cnt]) => { const p = DB.piezas.find(x=>x.id_pieza===id); return [id, p?.nombre||'—', p?.familia||'—', cnt, formatEur(cnt*(parseFloat(p?.precio||0)))]; });
+    return {
+        title: 'Ranking de Piezas Más Vendidas',
+        summary: `Las siguientes piezas han generado la mayor rotación en el periodo analizado.`,
+        metrics: [{ title: 'Pieza estrella', value: rows[0]?.[1]||'—', icon: 'ph-star', trend:'up', trendValue:`${rows[0]?.[3]||0} ventas` }],
+        table: { headers: ['ID','Nombre','Familia','Ventas','Facturado'], rows },
+        chartConfig: { labels: rows.map(r=>r[1]), datasets:[{ label:'Ventas', data:rows.map(r=>r[3]), backgroundColor:'#3b82f6', borderRadius:6 }] },
+        chartType: 'bar-horizontal',
+        conclusions: `El producto <strong>${rows[0]?.[1]}</strong> lidera las ventas. Asegura stock suficiente.`,
+        relatedIds: ['ventas_mes','piezas_muertas']
+    };
+}
+
+function buildStockReport(pl) {
+    const famStock = {};
+    DB.piezas.forEach(p => { famStock[p.familia] = (famStock[p.familia]||0) + parseInt(p.stock_disponible||0); });
+    const rows = Object.entries(famStock).sort((a,b)=>b[1]-a[1]);
+    const total = rows.reduce((s,[,v])=>s+v,0);
+    const valor = DB.piezas.reduce((s,p)=>s+parseFloat(p.precio||0)*parseInt(p.stock_disponible||1),0);
+    return {
+        title: 'Análisis de Stock por Familia',
+        summary: `Stock total: ${total} unidades. Valor estimado: ${formatEur(valor)}.`,
+        metrics: [
+            { title: 'Unidades en stock', value: total, icon:'ph-package', trend:'neutral', trendValue:'Total' },
+            { title: 'Valor inventario', value: formatEur(valor), icon:'ph-currency-eur', trend:'up', trendValue:'Estimado' }
+        ],
+        table: { headers: ['Familia','Unidades','% del total'], rows: rows.map(([f,c])=>[f,c,((c/total)*100).toFixed(1)+'%']) },
+        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ data:rows.map(r=>r[1]), backgroundColor:COLORES, borderWidth:0 }] },
+        chartType: 'doughnut',
+        conclusions: `La familia <strong>${rows[0]?.[0]}</strong> concentra el mayor stock. Revisa la rotación de cada familia.`,
+        relatedIds: ['piezas_muertas','piezas_top']
+    };
+}
+
+function buildFamiliaReport(pl) { return buildStockReport(pl); }
+
+function buildSinVenderReport(pl) {
+    const soldIds = new Set(DB.ventas.map(v=>v.pieza_id));
+    const sinVender = DB.piezas.filter(p=>!soldIds.has(p.id_pieza));
+    const byFam = {};
+    sinVender.forEach(p=>{ byFam[p.familia]=(byFam[p.familia]||0)+1; });
+    const rows = Object.entries(byFam).sort((a,b)=>b[1]-a[1]);
+    const valor = sinVender.reduce((s,p)=>s+parseFloat(p.precio||0)*parseInt(p.stock_disponible||1),0);
+    return {
+        title: 'Piezas Sin Rotación',
+        summary: `${sinVender.length} piezas sin ninguna venta. Valor inmovilizado: ${formatEur(valor)}.`,
+        metrics: [
+            { title: 'Sin vender', value: sinVender.length, icon:'ph-warning', trend:'down', trendValue:'Requiere acción' },
+            { title: 'Capital inmovilizado', value: formatEur(valor), icon:'ph-currency-eur', trend:'down', trendValue:'Urgente' }
+        ],
+        table: { headers: ['Familia','Piezas sin vender'], rows },
+        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ label:'Piezas', data:rows.map(r=>r[1]), backgroundColor:'#ef4444', borderRadius:6 }] },
+        chartType: 'bar',
+        conclusions: `Se recomienda reducir el precio en <strong>${rows[0]?.[0]}</strong> para activar la rotación.`,
+        relatedIds: ['ventas_mes','stock_actual']
+    };
+}
+
+function buildVehiculosReport(pl) {
+    const vBeneficio = DB.vehiculos.map(v => {
+        const piezasV = DB.piezas.filter(p=>p.vehiculo_id===v.id_vehiculo);
+        const ventasV = DB.ventas.filter(ve=>piezasV.find(p=>p.id_pieza===ve.pieza_id));
+        const ingresos = ventasV.reduce((s,ve)=>s+parseFloat(ve.precio_venta||0),0);
+        const beneficio = ingresos - parseFloat(v.coste_compra||0);
+        return { ...v, ingresos, beneficio };
+    }).sort((a,b)=>b.beneficio-a.beneficio).slice(0,10);
+    return {
+        title: 'Vehículos Más Rentables',
+        summary: `Análisis de rentabilidad por vehículo basado en ingresos de piezas vendidas.`,
+        metrics: [{ title: 'Más rentable', value: `${vBeneficio[0]?.marca||'—'} ${vBeneficio[0]?.modelo||''}`, icon:'ph-car', trend:'up', trendValue: formatEur(vBeneficio[0]?.beneficio||0) }],
+        table: { headers: ['ID','Marca','Modelo','Coste','Ingresos','Beneficio'], rows: vBeneficio.map(v=>[v.id_vehiculo,v.marca,v.modelo,formatEur(parseFloat(v.coste_compra)),formatEur(v.ingresos),formatEur(v.beneficio)]) },
+        chartConfig: { labels: vBeneficio.map(v=>`${v.marca} ${v.modelo}`), datasets:[{ label:'Beneficio (€)', data:vBeneficio.map(v=>v.beneficio.toFixed(2)), backgroundColor:'#8b5cf6', borderRadius:6 }] },
+        chartType: 'bar',
+        conclusions: `Los vehículos <strong>${vBeneficio[0]?.marca}</strong> presentan el mayor retorno. Prioriza su compra.`,
+        relatedIds: ['ventas_mes','piezas_top']
+    };
+}
+
+function buildMensualReport(pl) {
+    const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const monthData = monthLabels.map((_, i) => ({
+        mes: monthLabels[i],
+        total: DB.ventas.filter(v=>{ const d = new Date(v.fecha_venta); return d.getMonth()===i && d.getFullYear()===2025; }).reduce((s,v)=>s+parseFloat(v.precio_venta||0),0),
+        cnt: DB.ventas.filter(v=>{ const d = new Date(v.fecha_venta); return d.getMonth()===i && d.getFullYear()===2025; }).length
+    }));
+    const topMes = [...monthData].sort((a,b)=>b.total-a.total)[0];
+    return {
+        title: 'Evolución Mensual de Ingresos 2025',
+        summary: `Tendencia de ventas e ingresos a lo largo de los meses del año.`,
+        metrics: [{ title: 'Mejor mes', value: topMes.mes, icon:'ph-calendar', trend:'up', trendValue: formatEur(topMes.total) }],
+        table: { headers: ['Mes','Ventas','Ingresos (€)'], rows: monthData.map(m=>[m.mes, m.cnt, formatEur(m.total)]) },
+        chartConfig: { labels: monthLabels, datasets:[{ label:'Ingresos', data:monthData.map(m=>m.total.toFixed(2)), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4 }] },
+        chartType: 'line',
+        conclusions: `El mes de <strong>${topMes.mes}</strong> ha sido el mejor del año. Con tendencia ${monthData[11].total > monthData[0].total ? 'alcista' : 'bajista'}.`,
+        relatedIds: ['ventas_canal','piezas_top']
+    };
+}
+
+// =====================================================
+// 9. RENDERIZADO DE INFORME
+// =====================================================
+function renderReport(data) {
+    currentReportData = data;
+    reportTitle.textContent = data.title;
+    reportSummaryText.textContent = data.summary;
+
+    metricsContainer.innerHTML = data.metrics.map(m => {
+        const trendIcon = m.trend==='up'?'ph-trend-up':(m.trend==='down'?'ph-trend-down':'ph-minus');
+        const trendClass = m.trend==='up'?'trend-up':(m.trend==='down'?'trend-down':'');
+        return `<div class="metric-card"><div class="metric-card-header"><span class="metric-title">${m.title}</span><i class="ph ${m.icon} metric-icon"></i></div><div class="metric-value">${m.value}</div><div class="metric-trend ${trendClass}"><i class="ph ${trendIcon}"></i><span>${m.trendValue}</span></div></div>`;
+    }).join('');
+
+    tableHeadRow.innerHTML = data.table.headers.map(h=>`<th>${h}</th>`).join('');
+    tableBody.innerHTML = data.table.rows.map(row=>'<tr>'+row.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('');
+
+    const cd = document.getElementById('chartContainerDiv');
+    if (data.chartType === 'none' || !data.chartConfig) {
+        if (cd) cd.classList.add('hidden');
+    } else {
+        if (cd) cd.classList.remove('hidden');
+        if (chartInstance) chartInstance.destroy();
+        const ctx = document.getElementById('mainChart').getContext('2d');
+        let type = data.chartType;
+        const opts = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } };
+        if (type === 'bar-horizontal') { type='bar'; opts.indexAxis='y'; }
+        if (type !== 'doughnut' && type !== 'pie') opts.scales = { y:{ beginAtZero:true } };
+        else opts.cutout = '55%';
+        chartInstance = new Chart(ctx, { type, data: data.chartConfig, options: opts });
     }
+
+    reportConclusionsText.innerHTML = data.conclusions || '';
+    renderRelatedReports(data.relatedIds || []);
+    document.getElementById('exportActions') && document.getElementById('exportActions').classList.remove('hidden');
+}
+
+function renderRelatedReports(relatedIds) {
+    if (!relatedWidgetsGrid || !relatedReportsContainer) return;
+    const toRender = (relatedIds||[]).map(id=>widgetCatalog.find(w=>w.id===id)).filter(Boolean).slice(0,3);
+    if (!toRender.length) { relatedReportsContainer.classList.add('hidden'); return; }
+    relatedReportsContainer.classList.remove('hidden');
+    relatedWidgetsGrid.innerHTML = '';
+    toRender.forEach((w,idx) => {
+        const cid = `rt_${w.id}_${Date.now()}_${idx}`;
+        const card = document.createElement('div');
+        card.className = 'widget-card';
+        card.onclick = () => triggerQuickReport(w.prompt);
+        card.innerHTML = `<div class="widget-content"><h4>${w.title}</h4><p>${w.desc}</p><div class="widget-thumbnail"><canvas id="${cid}"></canvas></div></div><div class="widget-action"><span>Ver informe</span><i class="ph-bold ph-arrow-right"></i></div>`;
+        relatedWidgetsGrid.appendChild(card);
+        setTimeout(() => {
+            const c = document.getElementById(cid); if (!c) return;
+            let t = w.chartType === 'bar-horizontal' ? 'bar' : w.chartType;
+            const o = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false}}, animation:{duration:500}, scales:{} };
+            if (t==='bar') o.scales = { x:{display:false}, y:{display:false,beginAtZero:true} };
+            new Chart(c.getContext('2d'), { type:t, data:w.chartData, options:o });
+        }, 100);
+    });
 }
 
 // =====================================================
-// TRIGGERING DESDE WIDGET
+// 10. WIDGET CATALOG + THUMBNAILS
 // =====================================================
-function triggerQuickReport(text) {
-    promptInput.value = text;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => { generateBtn.click(); }, 500);
+const widgetCatalog = [
+    { id:'ventas_mes', title:'Ventas del mes', desc:'resumen de ventas actuales', prompt:'Genera un informe de todas las ventas realizadas durante el mes actual con gráfico de barras.', chartType:'bar', chartData:{labels:['S1','S2','S3','S4'],datasets:[{data:[10,12,9,14],backgroundColor:'#3b82f6',borderRadius:4}]} },
+    { id:'stock_actual', title:'Stock actual', desc:'distribución del inventario por familia', prompt:'Muestra el stock disponible agrupado por familia con gráfico circular.', chartType:'doughnut', chartData:{labels:['Mec.','Car.','Int.','Elec.'],datasets:[{data:[40,30,15,15],backgroundColor:COLORES,borderWidth:0}]} },
+    { id:'piezas_top', title:'Piezas más vendidas', desc:'ranking de piezas con mayor rotación', prompt:'Genera ranking de piezas más vendidas con gráfico de barras horizontales.', chartType:'bar', chartData:{labels:['Faros','Alt.','Retro.'],datasets:[{data:[30,22,18],backgroundColor:'#10b981',borderRadius:4}]} },
+    { id:'vehiculos_rentables', title:'Vehículos más rentables', desc:'beneficio por vehículo', prompt:'Analiza beneficio por vehículo con gráfico de barras.', chartType:'bar', chartData:{labels:['SEAT','VW','Peu.'],datasets:[{data:[45,38,31],backgroundColor:'#8b5cf6',borderRadius:4}]} },
+    { id:'piezas_muertas', title:'Piezas sin rotación', desc:'piezas que no se venden', prompt:'Identifica piezas sin vender con gráfico de barras.', chartType:'bar', chartData:{labels:['Asientos','Puertas'],datasets:[{data:[42,18],backgroundColor:'#ef4444',borderRadius:4}]} },
+    { id:'ventas_canal', title:'Ventas por canal', desc:'análisis por plataforma de venta', prompt:'Analiza las ventas por canal de venta con tabla y gráfico circular.', chartType:'doughnut', chartData:{labels:['eBay','Wallapop','Ovoko'],datasets:[{data:[35,30,20],backgroundColor:COLORES,borderWidth:0}]} }
+];
+
+function renderWidgetThumbnails() {
+    const map = { thumbVentas:'ventas_mes', thumbStock:'stock_actual', thumbPiezasTop:'piezas_top', thumbVehiculosRentables:'vehiculos_rentables', thumbPiezasMuertas:'piezas_muertas' };
+    Object.entries(map).forEach(([cid,wid]) => {
+        const canvas = document.getElementById(cid);
+        const w = widgetCatalog.find(x=>x.id===wid);
+        if (!canvas || !w) return;
+        const opts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{enabled:false}}, animation:{duration:700}, scales:{} };
+        let type = w.chartType;
+        if (type==='bar-horizontal'){type='bar';opts.indexAxis='y';}
+        if (type!=='doughnut') opts.scales={x:{display:false},y:{display:false}};
+        new Chart(canvas.getContext('2d'), {type, data:w.chartData, options:opts});
+    });
 }
 
 // =====================================================
-// EVENTO PRINCIPAL — GENERAR INFORME
+// 11. MAIN GENERATE BUTTON
 // =====================================================
 generateBtn.addEventListener('click', () => {
-    const promptRaw = promptInput.value.trim();
-    if (!promptRaw) {
-        alert("Por favor, escribe qué informe necesitas analizar.");
-        return;
-    }
-    const promptLower = promptRaw.toLowerCase();
+    const raw = promptInput.value.trim();
+    if (!raw) { alert('Escribe qué informe necesitas.'); return; }
+    const pl = raw.toLowerCase();
+
+    // Auto-export triggers
+    const wantsPdf = pl.includes('pdf') || pl.includes('exportar') && pl.includes('informe');
+    const wantsCsv = pl.includes('csv') || pl.includes('descargar');
+
     reportContainer.classList.add('hidden');
     loadingState.classList.remove('hidden');
     generateBtn.disabled = true;
 
-    const delay = Math.floor(Math.random() * 800) + 1400;
-
     setTimeout(() => {
-        const { key, widgetId } = interpretPrompt(promptLower);
-        const data = aiKnowledgeBase[key];
-        const chartType = resolveChartType(key, promptLower);
-
-        renderReport(data, chartType, promptRaw);
-        renderRelatedReports(data.relatedIds || []);
-
+        const data = interpretPrompt(pl);
+        renderReport(data);
         loadingState.classList.add('hidden');
         reportContainer.classList.remove('hidden');
         generateBtn.disabled = false;
-        reportContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, delay);
+        reportContainer.scrollIntoView({behavior:'smooth', block:'start'});
+        if (wantsPdf) setTimeout(exportToPDF, 600);
+        else if (wantsCsv) exportToCSV();
+    }, Math.random()*800+1200);
 });
 
-// =====================================================
-// RENDERIZADO DEL INFORME
-// =====================================================
-function renderReport(data, chartType, promptRaw) {
-    // 1. Título y Resumen
-    reportTitle.textContent = data.title;
-    reportSummaryText.textContent = data.summary;
-
-    // 2. Métricas
-    metricsContainer.innerHTML = '';
-    data.metrics.forEach(metric => {
-        const trendIcon = metric.trend === 'up' ? 'ph-trend-up' : (metric.trend === 'down' ? 'ph-trend-down' : 'ph-minus');
-        const trendClass = metric.trend === 'up' ? 'trend-up' : (metric.trend === 'down' ? 'trend-down' : '');
-        metricsContainer.insertAdjacentHTML('beforeend', `
-            <div class="metric-card">
-                <div class="metric-card-header">
-                    <span class="metric-title">${metric.title}</span>
-                    <i class="ph ${metric.icon} metric-icon"></i>
-                </div>
-                <div class="metric-value">${metric.value}</div>
-                <div class="metric-trend ${trendClass}">
-                    <i class="ph ${trendIcon}"></i>
-                    <span>${metric.trendValue}</span>
-                </div>
-            </div>
-        `);
-    });
-
-    // 3. Tabla de Datos
-    tableHeadRow.innerHTML = '';
-    data.table.headers.forEach(h => {
-        tableHeadRow.insertAdjacentHTML('beforeend', `<th>${h}</th>`);
-    });
-    tableBody.innerHTML = '';
-    data.table.rows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.forEach(cell => {
-            const td = document.createElement('td');
-            td.textContent = cell;
-            tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
-    });
-
-    // 4. Gráfico
-    const chartContainer = document.getElementById('chartContainerDiv');
-    if (chartType === 'none') {
-        if (chartContainer) chartContainer.classList.add('hidden');
-    } else {
-        if (chartContainer) chartContainer.classList.remove('hidden');
-        if (chartInstance) chartInstance.destroy();
-
-        const ctx = document.getElementById('mainChart').getContext('2d');
-        let type = chartType;
-        let isHorizontal = false;
-
-        if (type === 'bar-horizontal') { type = 'bar'; isHorizontal = true; }
-
-        const chartOptions = {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { position: 'bottom', labels: { padding: 20, font: { size: 13 } } }
-            }
-        };
-        if (isHorizontal) chartOptions.indexAxis = 'y';
-        if (type !== 'doughnut' && type !== 'pie') {
-            chartOptions.scales = { y: { beginAtZero: true } };
-        } else {
-            chartOptions.cutout = '55%';
-        }
-
-        chartInstance = new Chart(ctx, {
-            type,
-            data: {
-                labels: data.chartConfig.labels,
-                datasets: data.chartConfig.datasets
-            },
-            options: chartOptions
-        });
-    }
-
-    // 5. Conclusiones
-    if (data.conclusions) {
-        reportConclusionsText.innerHTML = data.conclusions;
-    }
-}
-
-// =====================================================
-// WIDGETS RELACIONADOS POST-INFORME
-// =====================================================
-function renderRelatedReports(relatedIds) {
-    if (!relatedWidgetsGrid || !relatedReportsContainer) return;
-    relatedWidgetsGrid.innerHTML = '';
-
-    const toRender = (relatedIds || [])
-        .map(id => widgetCatalog.find(w => w.id === id))
-        .filter(Boolean)
-        .slice(0, 3);
-
-    if (toRender.length === 0) {
-        relatedReportsContainer.classList.add('hidden');
-        return;
-    }
-    relatedReportsContainer.classList.remove('hidden');
-
-    toRender.forEach((widget, idx) => {
-        const canvasId = `relatedThumb_${widget.id}_${Date.now()}_${idx}`;
-        const card = document.createElement('div');
-        card.className = 'widget-card';
-        card.onclick = () => triggerQuickReport(widget.prompt);
-        card.innerHTML = `
-            <div class="widget-content">
-                <h4>${widget.title}</h4>
-                <p>${widget.desc}</p>
-                <div class="widget-thumbnail">
-                    <canvas id="${canvasId}"></canvas>
-                </div>
-            </div>
-            <div class="widget-action">
-                <span>Ver informe</span>
-                <i class="ph-bold ph-arrow-right"></i>
-            </div>
-        `;
-        relatedWidgetsGrid.appendChild(card);
-
-        setTimeout(() => {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            let type = widget.chartType;
-            const opts = {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { enabled: false } },
-                animation: { duration: 500 },
-                scales: {}
-            };
-            if (type === 'bar-horizontal') { type = 'bar'; opts.indexAxis = 'y'; }
-            if (type !== 'doughnut' && type !== 'line') {
-                opts.scales = { x: { display: false }, y: { display: false, beginAtZero: true } };
-            }
-            new Chart(ctx, { type, data: widget.chartData, options: opts });
-        }, 100);
-    });
-}
-// =====================================================
-// NAVEGACIÓN Y EXPANSIÓN DE DATOS (CSV BROWSER)
-// =====================================================
-
-// Elementos de navegación
-const navItems = {
-    bi: document.getElementById('nav-bi'),
-    vehiculos: document.getElementById('nav-vehiculos'),
-    recambios: document.getElementById('nav-recambios'),
-    ventas: document.getElementById('nav-ventas')
+window.triggerQuickReport = function(text) {
+    promptInput.value = text;
+    navigateTo('bi');
+    setTimeout(() => generateBtn.click(), 300);
 };
 
-// Función para cambiar el estado activo de la navegación
-function setActiveNav(activeKey) {
-    Object.values(navItems).forEach(item => item.classList.remove('active'));
-    if (navItems[activeKey]) navItems[activeKey].classList.add('active');
-    
-    // Si no es BI, ocultamos el panel de entrada de la IA para centrar la vista en los datos
-    const aiPanel = document.querySelector('.ai-panel');
-    if (activeKey === 'bi') {
-        aiPanel.classList.remove('hidden');
-        reportContainer.classList.add('hidden'); // Ocultar reportes previos al volver a BI
-    } else {
-        aiPanel.classList.add('hidden');
+// =====================================================
+// 12. EXPORT PDF
+// =====================================================
+async function exportToPDF() {
+    if (!currentReportData) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const margin = 15, width = 180;
+    let y = 15;
+
+    // Header
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(18); doc.setFont('helvetica','bold');
+    doc.text('DesguacePro', margin, 12);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text('Sistema de Gestión Inteligente de Desguace', margin, 20);
+    doc.text(new Date().toLocaleDateString('es-ES', {day:'2-digit',month:'long',year:'numeric'}), 210-margin, 20, {align:'right'});
+
+    y = 42;
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text(currentReportData.title, margin, y); y += 8;
+
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.setTextColor(80,80,80);
+    const lines = doc.splitTextToSize(currentReportData.summary, width);
+    doc.text(lines, margin, y); y += lines.length * 5 + 5;
+
+    // Chart image
+    const chartCanvas = document.getElementById('mainChart');
+    if (chartCanvas && currentReportData.chartType !== 'none') {
+        try {
+            const imgData = chartCanvas.toDataURL('image/png');
+            doc.addImage(imgData, 'PNG', margin, y, width, 70); y += 75;
+        } catch(e) {}
     }
-}
 
-// Escuchadores de eventos para navegación
-navItems.bi.addEventListener('click', (e) => {
-    e.preventDefault();
-    setActiveNav('bi');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-navItems.vehiculos.addEventListener('click', (e) => {
-    e.preventDefault();
-    loadAndDisplayCSV('vehiculos.csv', 'Listado Maestro de Vehículos', 'ph-car');
-    setActiveNav('vehiculos');
-});
-
-navItems.recambios.addEventListener('click', (e) => {
-    e.preventDefault();
-    loadAndDisplayCSV('piezas.csv', 'Catálogo Completo de Recambios', 'ph-wrench');
-    setActiveNav('recambios');
-});
-
-navItems.ventas.addEventListener('click', (e) => {
-    e.preventDefault();
-    loadAndDisplayCSV('ventas.csv', 'Registro Histórico de Ventas', 'ph-shopping-cart');
-    setActiveNav('ventas');
-});
-
-// Función para cargar, parsear y mostrar un CSV en el contenedor de informes
-function loadAndDisplayCSV(fileName, title, icon) {
-    reportContainer.classList.add('hidden');
-    loadingState.classList.remove('hidden');
-
-    fetch(fileName)
-        .then(response => {
-            if (!response.ok) throw new Error("No se pudo cargar el archivo CSV");
-            return response.text();
-        })
-        .then(csvText => {
-            Papa.parse(csvText, {
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const data = results.data;
-                    const headers = results.meta.fields;
-                    
-                    // Limitamos a 200 filas para mantener rendimiento si es muy grande
-                    const displayData = data.slice(0, 200);
-
-                    const reportData = {
-                        title: title,
-                        summary: `Explorando datos directos desde ${fileName}. Se muestran las primeras ${displayData.length} entradas de un total de ${data.length}.`,
-                        metrics: [
-                            { title: "Total Registros", value: data.length, icon: icon, trend: "neutral", trendValue: "CSV" },
-                            { title: "Filas Visibles", value: displayData.length, icon: "ph-eye", trend: "neutral", trendValue: "Preview" }
-                        ],
-                        table: {
-                            headers: headers,
-                            rows: displayData.map(obj => headers.map(h => obj[h]))
-                        },
-                        chartConfig: null, // No gráfico para vista de exploración pura
-                        conclusions: `Esta vista permite verificar la integridad de los datos en el archivo <strong>${fileName}</strong>. Para análisis avanzados, usa el Asistente IA.`
-                    };
-
-                    renderReport(reportData, 'none', '');
-                    relatedReportsContainer.classList.add('hidden'); // Ocultar sugerencias en vista de datos
-                    
-                    loadingState.classList.add('hidden');
-                    reportContainer.classList.remove('hidden');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-            });
-        })
-        .catch(error => {
-            console.error(error);
-            alert("Error al cargar los datos: " + error.message);
-            loadingState.classList.add('hidden');
-            setActiveNav('bi');
+    // Table
+    if (currentReportData.table) {
+        const headers = currentReportData.table.headers;
+        const rows = currentReportData.table.rows.slice(0, 25);
+        doc.setFontSize(9); doc.setFont('helvetica','bold');
+        const colW = width / headers.length;
+        doc.setFillColor(245,247,250);
+        doc.rect(margin, y, width, 7, 'F');
+        headers.forEach((h,i) => doc.text(String(h), margin + i*colW + 1, y+5));
+        y += 8; doc.setFont('helvetica','normal');
+        rows.forEach((row, ri) => {
+            if (ri % 2 === 0) { doc.setFillColor(252,252,252); doc.rect(margin,y,width,6,'F'); }
+            row.forEach((c,i) => doc.text(String(c).substring(0,18), margin + i*colW + 1, y+4));
+            y += 6; if (y > 270) { doc.addPage(); y = 20; }
         });
+        y += 4;
+    }
+
+    // Conclusions
+    if (currentReportData.conclusions && y < 260) {
+        doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(37,99,235);
+        doc.text('Conclusiones IA', margin, y); y += 6;
+        doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); doc.setFontSize(9);
+        const cLines = doc.splitTextToSize(currentReportData.conclusions.replace(/<[^>]+>/g,''), width);
+        doc.text(cLines, margin, y);
+    }
+
+    // Footer
+    doc.setFillColor(37,99,235);
+    doc.rect(0,287,210,10,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(8);
+    doc.text('DesguacePro © 2025 | Generado con IA', 105, 293.5, {align:'center'});
+
+    doc.save(`informe_desguace_${new Date().toISOString().split('T')[0]}.pdf`);
 }
+
+// =====================================================
+// 13. EXPORT CSV
+// =====================================================
+function exportToCSV() {
+    if (!currentReportData) return;
+    const { headers, rows } = currentReportData.table;
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(','))].join('\n');
+    const blob = new Blob(['\ufeff'+csvContent], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url;
+    a.download = `informe_desguace_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+}
+
+// Export buttons
+document.getElementById('rptExportPdf')?.addEventListener('click', exportToPDF);
+document.getElementById('rptExportCsv')?.addEventListener('click', exportToCSV);
+document.getElementById('exportPdfBtn')?.addEventListener('click', exportToPDF);
+document.getElementById('exportCsvBtn')?.addEventListener('click', exportToCSV);
+
+// =====================================================
+// 14. UTILTITIES
+// =====================================================
+function formatEur(n) {
+    if (isNaN(n)) return '0€';
+    return Number(n).toLocaleString('es-ES', {style:'currency', currency:'EUR', maximumFractionDigits:0});
+}
+
+// =====================================================
+// INIT
+// =====================================================
+document.addEventListener('DOMContentLoaded', () => {
+    navigateTo('bi');
+    initDataEngine();
+});

@@ -3,73 +3,313 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inteligencia de Negocio - Gestión de Desguaces</title>
+    <title>DesguacePro — Sistema de Gestión Inteligente</title>
+    <meta name="description" content="Sistema profesional de gestión de desguace con inteligencia artificial. Análisis de ventas, stock, vehículos y recambios.">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <!-- Chart.js for data visualization -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- PapaParse for CSV parsing -->
+    <!-- PapaParse for CSV -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <!-- Phosphor Icons for modern iconography -->
+    <!-- jsPDF + html2canvas for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <i class="ph-fill ph-car-profile logo-icon"></i>
-                <h2>DesguacePro</h2>
+<div class="app-container">
+
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <i class="ph-fill ph-car-profile logo-icon"></i>
+            <h2>DesguacePro</h2>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item" id="nav-dashboard">
+                <i class="ph ph-squares-four"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" id="nav-vehiculos">
+                <i class="ph ph-car"></i>
+                <span>Vehículos</span>
+            </a>
+            <a href="#" class="nav-item" id="nav-recambios">
+                <i class="ph ph-wrench"></i>
+                <span>Recambios</span>
+            </a>
+            <a href="#" class="nav-item" id="nav-ventas">
+                <i class="ph ph-shopping-cart"></i>
+                <span>Ventas</span>
+            </a>
+            <a href="#" class="nav-item active" id="nav-bi">
+                <i class="ph ph-chart-line-up"></i>
+                <span>Inteligencia IA</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="avatar">AD</div>
+                <div class="user-info">
+                    <span class="user-name">Admin</span>
+                    <span class="user-role">Gerente</span>
+                </div>
             </div>
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item">
-                    <i class="ph ph-squares-four"></i>
-                    <span>Dashboard</span>
-                </a>
-                <a href="#" class="nav-item" id="nav-vehiculos">
-                    <i class="ph ph-car"></i>
-                    <span>Vehículos</span>
-                </a>
-                <a href="#" class="nav-item" id="nav-recambios">
-                    <i class="ph ph-wrench"></i>
-                    <span>Recambios</span>
-                </a>
-                <a href="#" class="nav-item" id="nav-ventas">
-                    <i class="ph ph-shopping-cart"></i>
-                    <span>Ventas</span>
-                </a>
-                <a href="#" class="nav-item active" id="nav-bi">
-                    <i class="ph ph-chart-line-up"></i>
-                    <span>Inteligencia de Negocio</span>
-                </a>
-            </nav>
-            <div class="sidebar-footer">
-                <div class="user-profile">
-                    <div class="avatar">AD</div>
-                    <div class="user-info">
-                        <span class="user-name">Admin</span>
-                        <span class="user-role">Gerente</span>
+        </div>
+    </aside>
+
+    <!-- ========== MAIN CONTENT ========== -->
+    <main class="main-content">
+
+        <!-- Dynamic Header -->
+        <header class="top-header">
+            <div class="header-left">
+                <h1 id="pageTitle">Inteligencia IA</h1>
+                <span id="pageSubtitle" class="page-subtitle">Analista IA del Desguace</span>
+            </div>
+            <div class="header-actions">
+                <div id="exportActions" class="export-actions hidden">
+                    <button id="exportCsvBtn" class="secondary-btn" title="Exportar CSV">
+                        <i class="ph ph-file-csv"></i> CSV
+                    </button>
+                    <button id="exportPdfBtn" class="primary-btn" title="Exportar PDF">
+                        <i class="ph ph-file-pdf"></i> PDF
+                    </button>
+                </div>
+                <button class="icon-btn"><i class="ph ph-bell"></i></button>
+            </div>
+        </header>
+
+        <div class="content-wrapper">
+
+            <!-- ============================
+                 VIEW: DASHBOARD
+                 ============================ -->
+            <div id="view-dashboard" class="view hidden">
+                <div class="kpi-grid" id="kpiGrid">
+                    <div class="kpi-card kpi-blue">
+                        <div class="kpi-icon"><i class="ph ph-car"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiVehiculos">—</span>
+                            <span class="kpi-label">Vehículos en stock</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card kpi-green">
+                        <div class="kpi-icon"><i class="ph ph-wrench"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiPiezas">—</span>
+                            <span class="kpi-label">Recambios catalogados</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card kpi-purple">
+                        <div class="kpi-icon"><i class="ph ph-currency-eur"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiIngresos">—</span>
+                            <span class="kpi-label">Ingresos totales</span>
+                        </div>
+                    </div>
+                    <div class="kpi-card kpi-orange">
+                        <div class="kpi-icon"><i class="ph ph-chart-bar"></i></div>
+                        <div class="kpi-data">
+                            <span class="kpi-value" id="kpiVentas">—</span>
+                            <span class="kpi-label">Ventas registradas</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts-grid">
+                    <div class="glass-card">
+                        <h3><i class="ph ph-chart-bar"></i> Ventas por Canal</h3>
+                        <div style="height:260px;"><canvas id="dashCanalChart"></canvas></div>
+                    </div>
+                    <div class="glass-card">
+                        <h3><i class="ph ph-chart-pie-slice"></i> Stock por Familia</h3>
+                        <div style="height:260px;"><canvas id="dashFamiliaChart"></canvas></div>
+                    </div>
+                    <div class="glass-card chart-full">
+                        <h3><i class="ph ph-trend-up"></i> Ingresos mensuales (2025)</h3>
+                        <div style="height:260px;"><canvas id="dashIngresosChart"></canvas></div>
                     </div>
                 </div>
             </div>
-        </aside>
 
-        <!-- Main Content Area -->
-        <main class="main-content">
-            <header class="top-header">
-                <h1>Inteligencia de Negocio</h1>
-                <div class="header-actions">
-                    <button class="icon-btn"><i class="ph ph-bell"></i></button>
-                    <button class="icon-btn"><i class="ph ph-gear"></i></button>
+            <!-- ============================
+                 VIEW: VEHÍCULOS
+                 ============================ -->
+            <div id="view-vehiculos" class="view hidden">
+                <div class="filter-bar glass-card">
+                    <div class="search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="vehiculoSearch" placeholder="Buscar por marca o modelo...">
+                    </div>
+                    <div class="filter-group">
+                        <label>Fecha desde:</label>
+                        <input type="date" id="vehiculoFechaDesde">
+                        <label>hasta:</label>
+                        <input type="date" id="vehiculoFechaHasta">
+                    </div>
+                    <button class="secondary-btn" id="vehiculoResetFilters">
+                        <i class="ph ph-x-circle"></i> Limpiar
+                    </button>
                 </div>
-            </header>
+                <div class="glass-card table-glass">
+                    <div class="table-header-bar">
+                        <h3>Listado de Vehículos</h3>
+                        <span class="record-count" id="vehiculoCount">Cargando...</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Marca</th>
+                                    <th>Modelo</th>
+                                    <th>Fecha entrada</th>
+                                    <th>Coste compra</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vehiculoTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-bar" id="vehiculoPagination"></div>
+                </div>
+            </div>
 
-            <div class="content-wrapper">
+            <!-- ============================
+                 VIEW: RECAMBIOS
+                 ============================ -->
+            <div id="view-recambios" class="view hidden">
+                <div class="filter-bar glass-card">
+                    <div class="search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="recambioSearch" placeholder="Buscar recambio...">
+                    </div>
+                    <div class="filter-group">
+                        <label>Familia:</label>
+                        <select id="recambioFamilia">
+                            <option value="">Todas</option>
+                            <option>Motor</option>
+                            <option>Frenos</option>
+                            <option>Suspensión</option>
+                            <option>Electricidad</option>
+                            <option>Carrocería</option>
+                            <option>Ruedas</option>
+                            <option>Interior</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Canal:</label>
+                        <select id="recambioCanal">
+                            <option value="">Todos</option>
+                            <option>Recambio Verde</option>
+                            <option>eBay</option>
+                            <option>Wallapop</option>
+                            <option>Recambio Azul</option>
+                            <option>Ovoko</option>
+                        </select>
+                    </div>
+                    <button class="secondary-btn" id="recambioResetFilters">
+                        <i class="ph ph-x-circle"></i> Limpiar
+                    </button>
+                </div>
+                <div class="glass-card table-glass">
+                    <div class="table-header-bar">
+                        <h3>Catálogo de Recambios</h3>
+                        <span class="record-count" id="recambioCount">Cargando...</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Nombre</th>
+                                    <th>Familia</th>
+                                    <th>Precio</th>
+                                    <th>Canal</th>
+                                    <th>Stock</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recambioTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-bar" id="recambioPagination"></div>
+                </div>
+            </div>
+
+            <!-- ============================
+                 VIEW: VENTAS
+                 ============================ -->
+            <div id="view-ventas" class="view hidden">
+                <div class="filter-bar glass-card">
+                    <div class="search-box">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="ventaSearch" placeholder="Buscar por pieza ID o canal...">
+                    </div>
+                    <div class="filter-group">
+                        <label>Canal:</label>
+                        <select id="ventaCanal">
+                            <option value="">Todos</option>
+                            <option>Recambio Verde</option>
+                            <option>eBay</option>
+                            <option>Wallapop</option>
+                            <option>Recambio Azul</option>
+                            <option>Ovoko</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Desde:</label>
+                        <input type="date" id="ventaFechaDesde">
+                        <label>hasta:</label>
+                        <input type="date" id="ventaFechaHasta">
+                    </div>
+                    <button class="secondary-btn" id="ventaResetFilters">
+                        <i class="ph ph-x-circle"></i> Limpiar
+                    </button>
+                </div>
+
+                <div class="total-banner glass-card" id="ventaTotalBanner">
+                    <i class="ph-fill ph-currency-eur"></i>
+                    <div>
+                        <span class="total-label">Total vendido (filtrado)</span>
+                        <span class="total-value" id="ventaTotalValue">0€</span>
+                    </div>
+                </div>
+
+                <div class="glass-card table-glass">
+                    <div class="table-header-bar">
+                        <h3>Historial de Ventas</h3>
+                        <span class="record-count" id="ventaCount">Cargando...</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID Venta</th>
+                                    <th>Pieza ID</th>
+                                    <th>Fecha</th>
+                                    <th>Precio</th>
+                                    <th>Canal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ventaTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-bar" id="ventaPagination"></div>
+                </div>
+            </div>
+
+            <!-- ============================
+                 VIEW: INTELIGENCIA IA
+                 ============================ -->
+            <div id="view-bi" class="view">
                 <div class="dashboard-layout">
-                    <!-- MAIN COLUMN: AI Prompt & Results -->
+
+                    <!-- MAIN COLUMN -->
                     <div class="dashboard-main-col">
+
                         <!-- AI Assistant Panel -->
-                        <section class="ai-panel glass-card">
+                        <section class="ai-panel glass-card" id="aiPanelSection">
                             <div class="ai-header">
                                 <div class="ai-icon">
                                     <i class="ph-fill ph-sparkle"></i>
@@ -79,11 +319,9 @@
                                     <p>Describe el análisis que necesitas y generaré un informe completo al instante.</p>
                                 </div>
                             </div>
-                            
                             <div class="input-group">
-                                <textarea id="promptInput" placeholder="Escribe qué informe necesitas... Ejemplo: Muestra una comparativa de ventas de motores del último trimestre frente al anterior." rows="4"></textarea>
+                                <textarea id="promptInput" placeholder="Escribe qué informe necesitas... Ejemplo: ¿Qué piezas se venden más? ¿Qué canal genera más ingresos? Comparativa ventas este mes vs anterior." rows="4"></textarea>
                             </div>
-
                             <div class="action-row" style="justify-content: flex-end;">
                                 <button id="generateBtn" class="primary-btn">
                                     <i class="ph-bold ph-magic-wand"></i>
@@ -92,19 +330,23 @@
                             </div>
                         </section>
 
-                        <!-- Loading Indicator -->
+                        <!-- Loading -->
                         <div id="loadingState" class="loading-container hidden">
                             <div class="spinner"></div>
                             <p>La IA está analizando los datos y generando tu informe...</p>
                         </div>
 
-                        <!-- Generated Report Interface -->
+                        <!-- Generated Report -->
                         <section id="reportContainer" class="report-panel hidden">
                             <div class="report-header">
                                 <h2 id="reportTitle">Título del Informe</h2>
                                 <div class="report-actions">
-                                    <button class="secondary-btn"><i class="ph ph-download-simple"></i> Exportar PDF</button>
-                                    <button class="secondary-btn"><i class="ph ph-printer"></i> Imprimir</button>
+                                    <button id="rptExportCsv" class="secondary-btn">
+                                        <i class="ph ph-file-csv"></i> Exportar CSV
+                                    </button>
+                                    <button id="rptExportPdf" class="primary-btn">
+                                        <i class="ph ph-file-pdf"></i> Exportar PDF
+                                    </button>
                                 </div>
                             </div>
 
@@ -113,25 +355,15 @@
                                 <p id="reportSummaryText">Resumen ejecutivo del informe generado.</p>
                             </div>
 
-                            <!-- Key Metrics -->
-                            <div class="metrics-grid" id="metricsContainer">
-                                <!-- Metrics injected dynamically -->
-                            </div>
+                            <div class="metrics-grid" id="metricsContainer"></div>
 
-                            <!-- Visualizations & Data -->
                             <div class="data-grid">
                                 <div class="table-container glass-card" id="tableContainer">
                                     <h3>Desglose de Datos</h3>
                                     <div class="table-responsive">
                                         <table id="dataTable">
-                                            <thead>
-                                                <tr id="tableHeadRow">
-                                                    <!-- Headers dynamic -->
-                                                </tr>
-                                            </thead>
-                                            <tbody id="tableBody">
-                                                <!-- Rows dynamic -->
-                                            </tbody>
+                                            <thead><tr id="tableHeadRow"></tr></thead>
+                                            <tbody id="tableBody"></tbody>
                                         </table>
                                     </div>
                                 </div>
@@ -142,107 +374,84 @@
                                 </div>
                             </div>
 
-                            <!-- Conclusions Panel -->
-                            <div class="conclusions-panel glass-card" id="conclusionsPanel" style="margin-top: 1.5rem; background-color: #f8fafc; border-left: 4px solid var(--primary);">
-                                <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; font-size: 1.125rem; font-weight: 600;"><i class="ph-fill ph-lightbulb"></i> Conclusiones</h3>
-                                <div id="reportConclusionsText" style="color: var(--text-main); font-size: 0.95rem; line-height: 1.6;">
-                                    <!-- Conclusions injected dynamically -->
-                                </div>
+                            <div class="conclusions-panel glass-card" id="conclusionsPanel">
+                                <h3><i class="ph-fill ph-lightbulb"></i> Conclusiones IA</h3>
+                                <div id="reportConclusionsText"></div>
                             </div>
 
-                            <!-- Related Reports Suggestions -->
-                            <div id="relatedReportsContainer" class="related-reports-section" style="margin-top: 2.5rem;">
+                            <div id="relatedReportsContainer" class="related-reports-section hidden">
                                 <h3 class="section-title">Informes relacionados sugeridos</h3>
-                                <div class="quick-widgets-grid" id="relatedWidgetsGrid">
-                                    <!-- Injected dynamically -->
-                                </div>
+                                <div class="quick-widgets-grid" id="relatedWidgetsGrid"></div>
                             </div>
                         </section>
                     </div>
 
-                    <!-- SIDEBAR COLUMN: Automated Insights & Quick List -->
+                    <!-- SIDEBAR COLUMN -->
                     <aside class="dashboard-side-col">
-                        <!-- Automated Business Recommendations -->
+
+                        <!-- Auto Insights -->
                         <section class="recommendations-panel glass-card">
-                            <div class="ai-header" style="margin-bottom: 1rem;">
-                                <div class="ai-icon" style="background-color: #fef3c7; color: #d97706; width: 40px; height: 40px; font-size: 1.25rem;">
+                            <div class="ai-header" style="margin-bottom:1rem;">
+                                <div class="ai-icon" style="background-color:#fef3c7;color:#d97706;width:40px;height:40px;font-size:1.25rem;">
                                     <i class="ph-fill ph-lightbulb"></i>
                                 </div>
                                 <div>
-                                    <h3 style="font-size: 1.125rem; margin-bottom: 0.1rem;">Recomendaciones de negocio IA</h3>
-                                    <p style="font-size: 0.8rem;">Análisis en segundo plano</p>
+                                    <h3 style="font-size:1.125rem;margin-bottom:0.1rem;">Recomendaciones IA</h3>
+                                    <p style="font-size:0.8rem;">Análisis automático en tiempo real</p>
                                 </div>
                             </div>
-                            <div class="recommendations-list" id="recommendationsList">
-                                <!-- Loaded dynamically via JS -->
-                            </div>
+                            <div class="recommendations-list" id="recommendationsList"></div>
                         </section>
 
-                        <!-- Quick Widgets Section -->
+                        <!-- Quick Widgets -->
                         <section class="quick-widgets-section">
                             <h3 class="section-title">Informes Rápidos</h3>
                             <div class="sidebar-widgets-wrap">
-                                <!-- Widget 1: Ventas del mes -->
-                                <div class="widget-card" onclick="triggerQuickReport('Genera un informe de todas las ventas realizadas durante el mes actual, mostrando número total de ventas, facturación total, piezas más vendidas, y miniatura de gráfico de barras.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Genera un informe de todas las ventas realizadas durante el mes actual, mostrando número total de ventas, facturación total, piezas más vendidas, y gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Ventas del mes</h4>
                                         <p>resumen de ventas actuales</p>
-                                        <div class="widget-thumbnail">
-                                            <canvas id="thumbVentas"></canvas>
-                                        </div>
+                                        <div class="widget-thumbnail"><canvas id="thumbVentas"></canvas></div>
                                     </div>
                                 </div>
-
-                                <!-- Widget 2: Stock actual -->
-                                <div class="widget-card" onclick="triggerQuickReport('Muestra el stock disponible agrupado por familia, incluyendo miniatura de gráfico circular.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Muestra el stock disponible agrupado por familia, incluyendo gráfico circular.')">
                                     <div class="widget-content">
                                         <h4>Stock actual</h4>
                                         <p>distribución del inventario por familia</p>
-                                        <div class="widget-thumbnail">
-                                            <canvas id="thumbStock"></canvas>
-                                        </div>
+                                        <div class="widget-thumbnail"><canvas id="thumbStock"></canvas></div>
                                     </div>
                                 </div>
-
-                                <!-- Widget 3: Piezas más vendidas -->
-                                <div class="widget-card" onclick="triggerQuickReport('Genera ranking de piezas más vendidas últimos 30 días, miniatura de gráfico de barras horizontales.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Genera ranking de piezas más vendidas últimos 30 días con gráfico de barras horizontales.')">
                                     <div class="widget-content">
                                         <h4>Piezas más vendidas</h4>
                                         <p>ranking de piezas con mayor rotación</p>
-                                        <div class="widget-thumbnail" style="height: 100px;">
-                                            <canvas id="thumbPiezasTop"></canvas>
-                                        </div>
+                                        <div class="widget-thumbnail" style="height:100px;"><canvas id="thumbPiezasTop"></canvas></div>
                                     </div>
                                 </div>
-
-                                <!-- Widget 4: Vehículos más rentables -->
-                                <div class="widget-card" onclick="triggerQuickReport('Analiza beneficio generado por cada vehículo y muestra los más rentables, incluyendo miniatura de gráfico de barras.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Analiza beneficio generado por cada vehículo y muestra los más rentables con gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Vehículos más rentables</h4>
                                         <p>beneficio por vehículo</p>
-                                        <div class="widget-thumbnail" style="height: 100px;">
-                                            <canvas id="thumbVehiculosRentables"></canvas>
-                                        </div>
+                                        <div class="widget-thumbnail" style="height:100px;"><canvas id="thumbVehiculosRentables"></canvas></div>
                                     </div>
                                 </div>
-
-                                <!-- Widget 5: Piezas sin rotación -->
-                                <div class="widget-card" onclick="triggerQuickReport('Identifica piezas con más de 6 meses sin vender, miniatura de tabla o gráfico de barras.')">
+                                <div class="widget-card" onclick="triggerQuickReport('Identifica piezas con más de 6 meses sin vender con gráfico de barras.')">
                                     <div class="widget-content">
                                         <h4>Piezas sin rotación</h4>
                                         <p>piezas que no se venden</p>
-                                        <div class="widget-thumbnail" style="height: 100px;">
-                                            <canvas id="thumbPiezasMuertas"></canvas>
-                                        </div>
+                                        <div class="widget-thumbnail" style="height:100px;"><canvas id="thumbPiezasMuertas"></canvas></div>
                                     </div>
                                 </div>
                             </div>
                         </section>
                     </aside>
-                </div> <!-- End Dashboard Layout -->
+                </div>
             </div>
-        </main>
-    </div>
-    <script src="script.js"></script>
+
+        </div><!-- /content-wrapper -->
+    </main>
+</div><!-- /app-container -->
+
+<script src="script.js"></script>
 </body>
 </html>
