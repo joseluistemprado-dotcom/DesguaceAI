@@ -421,11 +421,11 @@ function buildUnifiedReport(pl) {
         const d = new Date(v.fecha_venta);
         
         if (dim === 'day') key = `${d.getDate()}/${d.getMonth()+1}`;
-        else if (dim === 'month') key = d.toLocaleString('es-ES', { month: 'short' });
-        else if (dim === 'canal') key = v.canal_venta;
+        else if (dim === 'month') key = d.toLocaleString('es-ES', { month: 'short' }).charAt(0).toUpperCase() + d.toLocaleString('es-ES', { month: 'short' }).slice(1).replace('.','');
+        else if (dim === 'canal') key = v.canal_venta || 'Otros';
         else if (dim === 'familia') {
             const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
-            key = p ? p.familia : 'Sin familia';
+            key = p ? p.familia : (v.familia || 'Sin familia');
         }
         else if (dim === 'vehiculo') {
             const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
@@ -444,13 +444,21 @@ function buildUnifiedReport(pl) {
         groups[key] = (groups[key] || 0) + val;
     });
 
-    // Ordenar y limitar si es ranking
+    // Ordenación
     let rows = Object.entries(groups);
-    if (dim !== 'day' && dim !== 'month') {
+    if (dim === 'day') {
+        const monthsNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+        rows.sort((a,b) => {
+            const [da, ma] = a[0].split('/').map(Number);
+            const [db, mb] = b[0].split('/').map(Number);
+            return (ma * 100 + da) - (mb * 100 + db);
+        });
+    } else if (dim === 'month') {
+        const mOrder = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+        rows.sort((a,b) => mOrder.indexOf(a[0]) - mOrder.indexOf(b[0]));
+    } else {
         rows.sort((a,b) => b[1] - a[1]);
         if (pl.includes('top')) rows = rows.slice(0, 10);
-    } else {
-        // Orden cronológico simple para días/meses si es posible
     }
 
     const totalVal = rows.reduce((s,[,v]) => s+v, 0);
