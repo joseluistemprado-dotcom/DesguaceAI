@@ -347,6 +347,46 @@ function updateRecommendations() {
 // =====================================================
 const COLORES = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
 
+/**
+ * Detecta inteligentemente el tipo de gráfico basado en el prompt del usuario.
+ * @param {string} pl Prompt en minúsculas
+ * @param {string} defaultType Tipo por defecto del informe
+ */
+function resolveChartTypeFromPrompt(pl, defaultType) {
+    console.log(`[AI Debug] Detectando tipo de gráfico para: "${pl}"`);
+    
+    // Prioridad absoluta a palabras clave explícitas
+    if (pl.includes('circular') || pl.includes('quesito') || pl.includes('pie') || pl.includes('tarta') || pl.includes('donut') || pl.includes('doughnut')) {
+        console.log(`[AI Debug] -> Tipo detectado: Circular (Doughnut)`);
+        return 'doughnut';
+    }
+    if (pl.includes('barras')) {
+        if (pl.includes('horizontal')) {
+            console.log(`[AI Debug] -> Tipo detectado: Barras Horizontales`);
+            return 'bar-horizontal';
+        }
+        console.log(`[AI Debug] -> Tipo detectado: Barras`);
+        return 'bar';
+    }
+    if (pl.includes('línea') || pl.includes('linea') || pl.includes('evolución') || pl.includes('evolucion') || pl.includes('tendencia')) {
+        console.log(`[AI Debug] -> Tipo detectado: Líneas`);
+        return 'line';
+    }
+    
+    // Inferencias basadas en el tipo de análisis si no se especifica tipo de gráfico
+    if (pl.includes('distribución') || pl.includes('distribucion') || pl.includes('porcentaje')) {
+        console.log(`[AI Debug] -> Inferencia: Distribución (Doughnut)`);
+        return 'doughnut';
+    }
+    if (pl.includes('comparativa') || pl.includes('ranking')) {
+        console.log(`[AI Debug] -> Inferencia: Comparativa (Bar / Bar-Horizontal)`);
+        return defaultType === 'none' ? 'bar' : defaultType;
+    }
+
+    console.log(`[AI Debug] -> Usando tipo por defecto: ${defaultType}`);
+    return defaultType;
+}
+
 function interpretPrompt(pl) {
     if (pl.includes('canal') || pl.includes('plataform')) return buildCanalReport(pl);
     if (pl.includes('familia') || pl.includes('categor')) return buildFamiliaReport(pl);
@@ -586,7 +626,15 @@ generateBtn.addEventListener('click', () => {
     generateBtn.disabled = true;
 
     setTimeout(() => {
-        const data = interpretPrompt(pl);
+        let data = interpretPrompt(pl);
+        
+        // --- PRIORIDAD DEL USUARIO (CRÍTICO) ---
+        // Extraemos el tipo de gráfico detectado del texto ACTUAL del input
+        const userChartType = resolveChartTypeFromPrompt(pl, data.chartType);
+        data.chartType = userChartType;
+        
+        console.log(`[AI Debug] Generando informe: "${data.title}" con gráfico: ${data.chartType}`);
+
         renderReport(data);
         loadingState.classList.add('hidden');
         reportContainer.classList.remove('hidden');
