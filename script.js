@@ -686,21 +686,21 @@ function buildMensualReport(pl) { return buildUnifiedReport(pl); }
 function resolveChartTypeFromPrompt(pl, defaultType) {
     console.log(`[AI Debug] Detectando tipo de gráfico para: "${pl}"`);
     
-    // Prioridad absoluta a palabras clave explícitas
-    if (pl.includes('circular') || pl.includes('quesito') || pl.includes('pie') || pl.includes('tarta') || pl.includes('donut') || pl.includes('doughnut')) {
-        return 'doughnut';
-    }
-    if (pl.includes('barras')) {
+    // Regex para detectar palabras completas y evitar colisiones como "pie" en "piezas"
+    const isPie = /\b(circular|quesito|pie|tarta|donut|doughnut)\b/i.test(pl);
+    const isBar = /\b(barras|columnas|ranking)\b/i.test(pl);
+    const isLine = /\b(línea|linea|evolución|evolucion|tendencia)\b/i.test(pl);
+
+    if (isPie) return 'doughnut';
+    if (isBar) {
         if (pl.includes('horizontal')) return 'bar-horizontal';
         return 'bar';
     }
-    if (pl.includes('línea') || pl.includes('linea') || pl.includes('evolución') || pl.includes('evolucion') || pl.includes('tendencia')) {
-        return 'line';
-    }
+    if (isLine) return 'line';
     
-    // Inferencias basadas en el tipo de análisis si no se especifica tipo de gráfico
+    // Inferencias basadas en el tipo de análisis (solo si no se detectó tipo explícito)
     if (pl.includes('distribución') || pl.includes('distribucion') || pl.includes('porcentaje')) return 'doughnut';
-    if (pl.includes('comparativa') || pl.includes('ranking')) return 'bar';
+    if (pl.includes('comparativa')) return 'bar';
 
     return defaultType;
 }
@@ -775,8 +775,15 @@ function renderReport(data) {
 function diagnoseChart(data) {
     const type = data.chartType;
     const labelsCount = data.chartConfig?.labels?.length || 0;
-    const isTemporal = data.title.toLowerCase().includes('evolución') || data.title.toLowerCase().includes('mensual') || data.title.toLowerCase().includes('día');
-    const isDistribution = data.title.toLowerCase().includes('canal') || data.title.toLowerCase().includes('familia') || data.title.toLowerCase().includes('distribución');
+    const isTemporal = data.title.toLowerCase().includes('evolución') || 
+                       data.title.toLowerCase().includes('mensual') || 
+                       data.title.toLowerCase().includes('día') ||
+                       data.summary.toLowerCase().includes('periodo marzo') || // Ejemplo detección mes
+                       data.chartConfig.labels.some(l => /^\d{1,2}\/\d{1,2}$/.test(l)); // Detección fechas DD/MM
+
+    const isDistribution = data.title.toLowerCase().includes('canal') || 
+                           data.title.toLowerCase().includes('familia') || 
+                           data.title.toLowerCase().includes('distribución');
 
     // Regla 1: Circular con muchas categorías
     if (type === 'doughnut' && labelsCount > 7) {
