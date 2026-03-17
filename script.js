@@ -8,6 +8,16 @@ let currentView = 'bi';
 let chartInstance = null;
 let currentReportData = null;
 let pendingChartRecommendation = null;
+const STORAGE_KEY = 'desguace_pro_db';
+
+function saveToStorage() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+        console.log('[Storage] Estado guardado correctamente.');
+    } catch(e) {
+        console.error('[Storage] Error al guardar en localStorage:', e);
+    }
+}
 
 // Paginación
 const PAGE_SIZE = 50;
@@ -41,6 +51,23 @@ function loadCSV(file) {
 }
 
 async function initDataEngine() {
+    // 1. Intentar cargar de LocalStorage
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+        try {
+            const data = JSON.parse(stored);
+            DB.vehiculos = data.vehiculos || [];
+            DB.piezas = data.piezas || [];
+            DB.ventas = data.ventas || [];
+            console.log('[Storage] Datos cargados desde localStorage.');
+            onDataReady();
+            return;
+        } catch(e) {
+            console.error('[Storage] Error al parsear datos guardados:', e);
+        }
+    }
+
+    // 2. Intentar cargar de archivos CSV (opcional, fallback)
     try {
         const [v, p, ve] = await Promise.all([
             loadCSV('vehiculos.csv'),
@@ -91,6 +118,7 @@ function useDemoData() {
 function clearData(type) {
     if (!confirm(`¿Estás seguro de que quieres limpiar todos los datos de ${type}?`)) return;
     DB[type] = [];
+    saveToStorage();
     console.log(`[Data Engine] Datos de ${type} borrados.`);
     onDataReady();
     alert(`Se han borrado los datos de ${type}.`);
@@ -140,6 +168,14 @@ function initDataManagement() {
             }
         });
     }
+
+    // Global Reset
+    document.getElementById('resetGlobalBtn')?.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de que quieres restablecer todos los datos del sistema? Se borrarán tus CSVs cargados y volverás a los datos de demostración.')) {
+            localStorage.removeItem(STORAGE_KEY);
+            location.reload();
+        }
+    });
 }
 
 /**
@@ -214,6 +250,7 @@ function importCSV(file) {
             if (confirmReplace) DB[target] = mappedData;
             else DB[target] = [...DB[target], ...mappedData];
 
+            saveToStorage();
             console.log(`[Import] ${mappedData.length} registros cargados en ${target}.`);
             onDataReady();
             alert(`Éxito: ${mappedData.length} registros cargados en ${target}.`);
