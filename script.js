@@ -7,6 +7,7 @@ const DB = { vehiculos: [], piezas: [], ventas: [] };
 let currentView = 'bi';
 let chartInstance = null;
 let currentReportData = null;
+let pendingChartRecommendation = null;
 
 // Paginación
 const PAGE_SIZE = 50;
@@ -595,8 +596,87 @@ function renderReport(data) {
     }
 
     reportConclusionsText.innerHTML = data.conclusions || '';
+    
+    // --- POWER BI ADVISOR (Expert Analysis) ---
+    const diagnosis = diagnoseChart(data);
+    if (!diagnosis.optimal) {
+        pendingChartRecommendation = diagnosis.rec;
+        const advisorHtml = `
+            <div class="advisor-box" style="margin-top:1.5rem; padding:1.25rem; border-radius:0.75rem; background:#f0f7ff; border:1px solid #3b82f6;">
+                <h4 style="color:#1e3a8a; display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem;">
+                    <i class="ph-fill ph-lightbulb"></i> Power BI Advisor Diagnóstico
+                </h4>
+                <div style="font-size:0.9rem; margin-bottom:0.5rem;"><strong>Gráfico actual:</strong> ${data.chartType}</div>
+                <div style="font-size:0.9rem; margin-bottom:0.5rem;"><strong>Óptimo:</strong> <span style="color:#ef4444; font-weight:700;">No</span></div>
+                <div style="font-size:0.9rem; margin-bottom:0.75rem;"><strong>Justificación:</strong> ${diagnosis.why}</div>
+                <div style="background:white; padding:0.75rem; border-radius:0.5rem; border-left:4px solid #3b82f6;">
+                    <div style="font-size:0.9rem;"><strong>Recomendación:</strong> ${diagnosis.rec}</div>
+                    <div style="font-size:0.85rem; color:#64748b; margin-top:0.25rem;">${diagnosis.reason}</div>
+                </div>
+                <div style="margin-top:1rem; font-weight:600; color:#2563eb;">
+                    ¿Quieres cambiar a este gráfico? Responde <strong>Sí</strong> o <strong>No</strong> en el asistente.
+                </div>
+            </div>
+        `;
+        reportConclusionsText.innerHTML += advisorHtml;
+    } else {
+        pendingChartRecommendation = null;
+    }
+
     renderRelatedReports(data.relatedIds || []);
     document.getElementById('exportActions') && document.getElementById('exportActions').classList.remove('hidden');
+}
+
+/**
+ * Experto en visualización tipo Power BI.
+ */
+function diagnoseChart(data) {
+    const type = data.chartType;
+    const labelsCount = data.chartConfig?.labels?.length || 0;
+    const isTemporal = data.title.toLowerCase().includes('evolución') || data.title.toLowerCase().includes('mensual') || data.title.toLowerCase().includes('día');
+    const isDistribution = data.title.toLowerCase().includes('canal') || data.title.toLowerCase().includes('familia') || data.title.toLowerCase().includes('distribución');
+
+    // Regla 1: Circular con muchas categorías
+    if (type === 'doughnut' && labelsCount > 7) {
+        return {
+            optimal: false,
+            why: 'Las diferencias entre categorías son difíciles de percibir cuando hay demasiados elementos en un gráfico circular.',
+            rec: 'bar',
+            reason: 'Un gráfico de barras permite comparar los valores con mucha más precisión y claridad.'
+        };
+    }
+
+    // Regla 2: Temporal en Circular o Barras fijas
+    if (isTemporal && (type === 'doughnut' || type === 'bar')) {
+        return {
+            optimal: false,
+            why: 'Las series temporales se visualizan mejor como una tendencia continua.',
+            rec: 'line',
+            reason: 'El gráfico de líneas permite identificar picos, valles y la evolución del tiempo de forma natural.'
+        };
+    }
+
+    // Regla 3: Distribución en Barras cuando hay pocos elementos
+    if (isDistribution && type === 'bar' && labelsCount < 5) {
+        return {
+            optimal: false,
+            why: 'Para proporciones limitadas, un gráfico circular es excelente para ver la parte respecto al todo.',
+            rec: 'doughnut',
+            reason: 'Visualiza rápidamente la cuota de mercado o distribución porcentual.'
+        };
+    }
+
+    // Regla 4: Muchas barras verticales -> Barras horizontales
+    if (type === 'bar' && labelsCount > 10) {
+        return {
+            optimal: false,
+            why: 'Las etiquetas se vuelven difíciles de leer en el eje X cuando hay muchos elementos.',
+            rec: 'bar-horizontal',
+            reason: 'El formato horizontal ofrece más espacio para los nombres y una lectura de ranking más natural.'
+        };
+    }
+
+    return { optimal: true };
 }
 
 function renderRelatedReports(relatedIds) {
@@ -656,6 +736,23 @@ generateBtn.addEventListener('click', () => {
     if (!raw) { alert('Escribe qué informe necesitas.'); return; }
     const pl = raw.toLowerCase();
 
+    // --- INTERCEPCIÓN POWER BI ADVISOR ---
+    if ((pl === 'sí' || pl === 'si') && pendingChartRecommendation && currentReportData) {
+        console.log(`[Advisor] Usuario aceptó recomendación: ${pendingChartRecommendation}`);
+        currentReportData.chartType = pendingChartRecommendation;
+        renderReport(currentReportData);
+        pendingChartRecommendation = null;
+        promptInput.value = '';
+        return;
+    }
+    if (pl === 'no' && pendingChartRecommendation) {
+        console.log(`[Advisor] Usuario rechazó recomendación.`);
+        pendingChartRecommendation = null;
+        promptInput.value = '';
+        // Simplemente limpiamos el aviso del anterior conclusiones si queremos, o lo dejamos.
+        return;
+    }
+
     // Auto-export triggers
     const wantsPdf = pl.includes('pdf') || pl.includes('exportar') && pl.includes('informe');
     const wantsCsv = pl.includes('csv') || pl.includes('descargar');
@@ -681,6 +778,8 @@ generateBtn.addEventListener('click', () => {
         reportContainer.scrollIntoView({behavior:'smooth', block:'start'});
         if (wantsPdf) setTimeout(exportToPDF, 600);
         else if (wantsCsv) exportToCSV();
+        
+        promptInput.value = ''; // Limpiamos para la siguiente interacción
     }, Math.random()*800+1200);
 });
 
