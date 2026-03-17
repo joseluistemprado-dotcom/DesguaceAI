@@ -26,6 +26,7 @@ const tableBody = document.getElementById('tableBody');
 const reportConclusionsText = document.getElementById('reportConclusionsText');
 const relatedReportsContainer = document.getElementById('relatedReportsContainer');
 const relatedWidgetsGrid = document.getElementById('relatedWidgetsGrid');
+const csvDropzone = document.getElementById('csvDropzone');
 
 // =====================================================
 // 1. DATA ENGINE — Carga CSVs en memoria
@@ -84,12 +85,153 @@ function useDemoData() {
     });
 }
 
+/**
+ * Limpia los datos de un apartado específico y refresca la UI.
+ */
+function clearData(type) {
+    if (!confirm(`¿Estás seguro de que quieres limpiar todos los datos de ${type}?`)) return;
+    DB[type] = [];
+    console.log(`[Data Engine] Datos de ${type} borrados.`);
+    onDataReady();
+    alert(`Se han borrado los datos de ${type}.`);
+}
+
+/**
+ * Inicializa los listeners de gestión de datos (Limpiar e Importar).
+ */
+function initDataManagement() {
+    // Botones de limpieza
+    document.getElementById('clearVehiculosBtn')?.addEventListener('click', () => clearData('vehiculos'));
+    document.getElementById('clearRecambiosBtn')?.addEventListener('click', () => clearData('piezas'));
+    document.getElementById('clearVentasBtn')?.addEventListener('click', () => clearData('ventas'));
+
+    // Dropzone logic
+    if (csvDropzone) {
+        csvDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            csvDropzone.classList.add('dragover');
+        });
+        csvDropzone.addEventListener('dragleave', () => csvDropzone.classList.remove('dragover'));
+        csvDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            csvDropzone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.csv')) {
+                importCSV(file);
+            } else {
+                alert('Por favor, selecciona un archivo CSV válido.');
+            }
+        });
+        csvDropzone.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = (e) => importCSV(e.target.files[0]);
+            input.click();
+        });
+    }
+
+    // Enter to send prompt
+    if (promptInput) {
+        promptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                generateBtn.click();
+            }
+        });
+    }
+}
+
+/**
+ * Importación inteligente con mapeo de columnas.
+ */
+function importCSV(file) {
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+            const data = results.data;
+            if (!data.length) return;
+
+            const headers = Object.keys(data[0]).map(h => h.toLowerCase());
+            let target = '';
+
+            // Heurística de detección de tipo de CSV
+            if (headers.some(h => h.includes('modelo') || h.includes('marca') || h.includes('bastidor'))) target = 'vehiculos';
+            else if (headers.some(h => h.includes('pieza') || h.includes('familia') || h.includes('referencia'))) target = 'piezas';
+            else if (headers.some(h => h.includes('venta') || h.includes('fecha_venta') || h.includes('importe'))) target = 'ventas';
+
+            if (!target) {
+                alert('No se pudo identificar el tipo de datos del CSV. Asegúrate de que las columnas sean correctas.');
+                return;
+            }
+
+            const confirmReplace = confirm(`Detectado CSV de ${target.toUpperCase()}. ¿Quieres REEMPLAZAR los datos actuales? (Aceptar = Reemplazar, Cancelar = Agregar)`);
+            
+            // Mapeo inteligente (Sinónimos y Columnas Requeridas)
+            const mappedData = data.map(row => {
+                const newRow = {};
+                // Mapeo de columnas prioritarias
+                Object.entries(row).forEach(([originalKey, val]) => {
+                    const key = originalKey.toLowerCase();
+                    // Vehiculos -> código, modelo, familia, marca
+                    if (target === 'vehiculos') {
+                        if (key.includes('código') || key.includes('id') || key.includes('vin') || key.includes('bastidor')) newRow.id_vehiculo = val;
+                        else if (key.includes('modelo')) newRow.modelo = val;
+                        else if (key.includes('marca')) newRow.marca = val;
+                        else if (key.includes('familia')) newRow.familia = val;
+                        else if (key.includes('entrada') || key.includes('fecha')) newRow.fecha_entrada = val;
+                        else if (key.includes('coste') || key.includes('compra')) newRow.coste_compra = val;
+                        else newRow[originalKey] = val; // Se mantienen las demás columnas
+                    }
+                    // Piezas -> referencia, nombre, cantidad, peso
+                    else if (target === 'piezas') {
+                        if (key.includes('referencia') || key.includes('ref') || key.includes('id')) newRow.id_pieza = val;
+                        else if (key.includes('nombre') || key.includes('denominación')) newRow.nombre = val;
+                        else if (key.includes('cantidad') || key.includes('stock') || key.includes('cant')) newRow.stock_disponible = val;
+                        else if (key.includes('peso')) newRow.peso = val;
+                        else if (key.includes('familia')) newRow.familia = val;
+                        else if (key.includes('precio') || key.includes('importe')) newRow.precio = val;
+                        else if (key.includes('canal')) newRow.canal_venta = val;
+                        else if (key.includes('vehiculo')) newRow.vehiculo_id = val;
+                        else newRow[originalKey] = val;
+                    }
+                    // Ventas -> fecha, vehículo, pieza, cantidad, importe
+                    else if (target === 'ventas') {
+                        if (key.includes('fecha')) newRow.fecha_venta = val;
+                        else if (key.includes('vehículo') || key.includes('coche')) newRow.vehiculo_id = val;
+                        else if (key.includes('pieza') || key.includes('producto')) newRow.pieza_id = val;
+                        else if (key.includes('cantidad') || key.includes('cant') || key.includes('uds')) newRow.cantidad = val;
+                        else if (key.includes('importe') || key.includes('precio') || key.includes('total')) newRow.precio_venta = val;
+                        else if (key.includes('id_venta') || key.includes('operación')) newRow.id_venta = val;
+                        else if (key.includes('canal')) newRow.canal_venta = val;
+                        else newRow[originalKey] = val;
+                    }
+                });
+                return newRow;
+            });
+
+            if (confirmReplace) DB[target] = mappedData;
+            else DB[target] = [...DB[target], ...mappedData];
+
+            console.log(`[Import] ${mappedData.length} registros cargados en ${target}.`);
+            onDataReady();
+            alert(`Éxito: ${mappedData.length} registros cargados en ${target}.`);
+        }
+    });
+}
+
+
 function onDataReady() {
     updateDashboardKPIs();
     renderWidgetThumbnails();
     generateAutoInsights();
     updateRecommendations();
-    setInterval(updateRecommendations, 30000);
+    // Refrescamos la vista actual si no es BI
+    if (currentView !== 'bi') {
+        const viewFuncMap = { vehiculos: renderVehiculos, recambios: renderRecambios, ventas: renderVentas };
+        if (viewFuncMap[currentView]) viewFuncMap[currentView]();
+    }
 }
 
 // =====================================================
@@ -436,7 +578,7 @@ function buildUnifiedReport(pl) {
 
         let val = 0;
         if (met === 'ingresos') val = parseFloat(v.precio_venta || 0);
-        else if (met === 'ventas') val = 1;
+        else if (met === 'ventas') val = parseInt(v.cantidad || 1);
         else if (met === 'beneficio') {
             const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
             val = parseFloat(v.precio_venta || 0) - (parseFloat(p?.precio || 0) * 0.2); // Simulación margen
@@ -898,4 +1040,5 @@ function formatEur(n) {
 document.addEventListener('DOMContentLoaded', () => {
     navigateTo('bi');
     initDataEngine();
+    initDataManagement();
 });

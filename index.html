@@ -156,7 +156,12 @@
                 <div class="glass-card table-glass">
                     <div class="table-header-bar">
                         <h3>Listado de Vehículos</h3>
-                        <span class="record-count" id="vehiculoCount">Cargando...</span>
+                        <div class="table-actions">
+                            <span class="record-count" id="vehiculoCount">Cargando...</span>
+                            <button class="danger-btn sm" id="clearVehiculosBtn" title="Limpiar todos los vehículos">
+                                <i class="ph ph-trash"></i> Limpiar vehículos
+                            </button>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table>
@@ -216,7 +221,12 @@
                 <div class="glass-card table-glass">
                     <div class="table-header-bar">
                         <h3>Catálogo de Recambios</h3>
-                        <span class="record-count" id="recambioCount">Cargando...</span>
+                        <div class="table-actions">
+                            <span class="record-count" id="recambioCount">Cargando...</span>
+                            <button class="danger-btn sm" id="clearRecambiosBtn" title="Limpiar todos los recambios">
+                                <i class="ph ph-trash"></i> Limpiar piezas
+                            </button>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table>
@@ -279,7 +289,12 @@
                 <div class="glass-card table-glass">
                     <div class="table-header-bar">
                         <h3>Historial de Ventas</h3>
-                        <span class="record-count" id="ventaCount">Cargando...</span>
+                        <div class="table-actions">
+                            <span class="record-count" id="ventaCount">Cargando...</span>
+                            <button class="danger-btn sm" id="clearVentasBtn" title="Limpiar todas las ventas">
+                                <i class="ph ph-trash"></i> Limpiar ventas
+                            </button>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table>
@@ -311,12 +326,18 @@
                         <!-- AI Assistant Panel -->
                         <section class="ai-panel glass-card" id="aiPanelSection">
                             <div class="ai-header">
+                                <div class="ai-panel-top-left">
+                                    <div id="csvDropzone" class="csv-dropzone">
+                                        <i class="ph-bold ph-file-arrow-up"></i>
+                                        <span>Importar CSV (Arrastra aquí)</span>
+                                    </div>
+                                </div>
                                 <div class="ai-icon">
                                     <i class="ph-fill ph-sparkle"></i>
                                 </div>
                                 <div>
                                     <h2>Analista IA del Desguace</h2>
-                                    <p>Describe el análisis que necesitas y generaré un informe completo al instante.</p>
+                                    <p>Describe el análisis que necesitas o importa nuevos datos para analizar.</p>
                                 </div>
                             </div>
                             <div class="input-group">
