@@ -513,25 +513,35 @@ function parseTimeFilter(pl) {
 }
 
 function parseDimension(pl) {
-    if (pl.includes('por día') || pl.includes('por dia') || pl.includes('diario')) return 'day';
-    if (pl.includes('por mes') || pl.includes('mensual')) return 'month';
-    if (pl.includes('por canal') || pl.includes('plataforma')) return 'canal';
-    if (pl.includes('por familia') || pl.includes('categoría')) return 'familia';
-    if (pl.includes('por vehículo') || pl.includes('por coche')) return 'vehiculo';
+    if (/\b(día|dia|diario)\b/i.test(pl)) return 'day';
+    if (/\b(mes|mensual|meses)\b/i.test(pl)) return 'month';
+    if (/\b(canal|canales|plataforma|plataformas)\b/i.test(pl)) return 'canal';
+    if (/\b(familia|familias|categoría|categoria|categorías|categorias)\b/i.test(pl)) return 'familia';
+    if (/\b(vehículo|vehiculo|vehículos|vehiculos|coche|coches|automóvi|automovil)\b/i.test(pl)) return 'vehiculo';
+    if (/\b(pieza|piezas|recambio|recambios|repuesto|repuestos|producto|productos|referencia|referencias)\b/i.test(pl)) return 'pieza';
     
-    // Inferencia por defecto
+    // Inferencia por defecto basada en verbos o palabras de acción
     if (pl.includes('evolución') || pl.includes('tiempo')) return 'month';
     if (pl.includes('distribución') || pl.includes('reparto')) return 'canal';
+    if (pl.includes('vendidas') || pl.includes('stock')) return 'pieza';
     return 'canal';
 }
 
 function parseMetric(pl) {
-    if (pl.includes('beneficio') || pl.includes('margen') || pl.includes('ganancia')) return 'beneficio';
-    if (pl.includes('venta') || pl.includes('operación') || pl.includes('cantidad')) return 'ventas';
+    if (/\b(beneficio|beneficios|margen|márgenes|margenes|ganancia|ganancias|rentabilidad|rentable)\b/i.test(pl)) return 'beneficio';
+    if (/\b(venta|ventas|operación|operaciones|cantidad|unidades|volumen|vendido|vendidas)\b/i.test(pl)) return 'ventas';
     return 'ingresos'; // por defecto
 }
 
 function interpretPrompt(pl) {
+    // Casos especiales directos
+    if (pl.includes('vehículo') && (pl.includes('rentable') || pl.includes('beneficio') || pl.includes('margen'))) {
+        return buildVehiculosReport(pl);
+    }
+    if (pl.includes('sin vender') || pl.includes('sin rotación') || pl.includes('sin rotacion') || pl.includes('muertas')) {
+        return buildDeadStockReport(pl);
+    }
+    
     return buildUnifiedReport(pl);
 }
 
@@ -574,6 +584,10 @@ function buildUnifiedReport(pl) {
             const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
             const veh = DB.vehiculos.find(x => x.id_vehiculo === p?.vehiculo_id);
             key = veh ? `${veh.marca} ${veh.modelo}` : 'Varios';
+        }
+        else if (dim === 'pieza') {
+            const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
+            key = p ? p.nombre : (v.nombre_pieza || v.pieza_id || 'Desconocida');
         }
 
         let val = 0;
@@ -673,6 +687,33 @@ function buildVehiculosReport(pl) {
         chartType: 'bar',
         conclusions: `Los vehículos de marca <strong>${rows[0]?.[0].split(' ')[0]}</strong> generan el mejor margen.`,
         relatedIds: ['ventas_mes','piezas_top']
+    };
+}
+
+function buildDeadStockReport(pl) {
+    // Piezas que NO están en la tabla de ventas
+    const piezasVendidasIds = new Set(DB.ventas.map(v => v.pieza_id));
+    const piezasSinRotacion = DB.piezas.filter(p => !piezasVendidasIds.has(p.id_pieza));
+    
+    const groups = {};
+    piezasSinRotacion.forEach(p => {
+        groups[p.familia] = (groups[p.familia] || 0) + 1;
+    });
+    
+    let rows = Object.entries(groups).sort((a,b) => b[1] - a[1]);
+
+    return {
+        title: 'Piezas sin rotación (Stock muerto)',
+        summary: `Se han identificado ${piezasSinRotacion.length} piezas que todavía no han registrado ninguna venta.`,
+        metrics: [
+            { title: 'Piezas estancadas', value: piezasSinRotacion.length, icon:'ph-warning-octagon', trend:'down', trendValue:'Total' },
+            { title: 'Valor en stock', value: formatEur(piezasSinRotacion.reduce((s,p)=>s+parseFloat(p.precio||0),0)), icon:'ph-currency-eur', trend:'neutral', trendValue:'Estimado' }
+        ],
+        table: { headers: ['Familia','Cantidad'], rows: rows.map(([k,v])=>[k, v]) },
+        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ label:'Piezas', data:rows.map(r=>r[1]), backgroundColor:COLORES, borderRadius:4 }] },
+        chartType: 'bar',
+        conclusions: `La familia <strong>${rows[0]?.[0]}</strong> concentra el mayor número de piezas sin vender. Se recomienda revisar su precio.`,
+        relatedIds: ['piezas_top', 'stock_actual']
     };
 }
 
@@ -855,11 +896,11 @@ function renderRelatedReports(relatedIds) {
 // 10. WIDGET CATALOG + THUMBNAILS
 // =====================================================
 const widgetCatalog = [
-    { id:'ventas_mes', title:'Ventas del mes', desc:'resumen de ventas actuales', prompt:'Genera un informe de todas las ventas realizadas durante el mes actual con gráfico de barras.', chartType:'bar', chartData:{labels:['S1','S2','S3','S4'],datasets:[{data:[10,12,9,14],backgroundColor:'#3b82f6',borderRadius:4}]} },
+    { id:'ventas_mes', title:'Ventas del mes', desc:'resumen de ventas actuales', prompt:'Analiza las ventas por canal de este mes con gráfico de barras.', chartType:'bar', chartData:{labels:['S1','S2','S3','S4'],datasets:[{data:[10,12,9,14],backgroundColor:'#3b82f6',borderRadius:4}]} },
     { id:'stock_actual', title:'Stock actual', desc:'distribución del inventario por familia', prompt:'Muestra el stock disponible agrupado por familia con gráfico circular.', chartType:'doughnut', chartData:{labels:['Mec.','Car.','Int.','Elec.'],datasets:[{data:[40,30,15,15],backgroundColor:COLORES,borderWidth:0}]} },
-    { id:'piezas_top', title:'Piezas más vendidas', desc:'ranking de piezas con mayor rotación', prompt:'Genera ranking de piezas más vendidas con gráfico de barras horizontales.', chartType:'bar', chartData:{labels:['Faros','Alt.','Retro.'],datasets:[{data:[30,22,18],backgroundColor:'#10b981',borderRadius:4}]} },
-    { id:'vehiculos_rentables', title:'Vehículos más rentables', desc:'beneficio por vehículo', prompt:'Analiza beneficio por vehículo con gráfico de barras.', chartType:'bar', chartData:{labels:['SEAT','VW','Peu.'],datasets:[{data:[45,38,31],backgroundColor:'#8b5cf6',borderRadius:4}]} },
-    { id:'piezas_muertas', title:'Piezas sin rotación', desc:'piezas que no se venden', prompt:'Identifica piezas sin vender con gráfico de barras.', chartType:'bar', chartData:{labels:['Asientos','Puertas'],datasets:[{data:[42,18],backgroundColor:'#ef4444',borderRadius:4}]} },
+    { id:'piezas_top', title:'Piezas más vendidas', desc:'ranking de piezas con mayor rotación', prompt:'Genera un ranking de las piezas más vendidas con gráfico de barras.', chartType:'bar', chartData:{labels:['Faros','Alt.','Retro.'],datasets:[{data:[30,22,18],backgroundColor:'#10b981',borderRadius:4}]} },
+    { id:'vehiculos_rentables', title:'Vehículos más rentables', desc:'beneficio por vehículo', prompt:'Analiza el beneficio generado por cada vehículo con gráfico de barras.', chartType:'bar', chartData:{labels:['SEAT','VW','Peu.'],datasets:[{data:[45,38,31],backgroundColor:'#8b5cf6',borderRadius:4}]} },
+    { id:'piezas_muertas', title:'Piezas sin rotación', desc:'piezas que no se venden', prompt:'Identifica las piezas sin rotación ni ventas con gráfico de barras.', chartType:'bar', chartData:{labels:['Asientos','Puertas'],datasets:[{data:[42,18],backgroundColor:'#ef4444',borderRadius:4}]} },
     { id:'ventas_canal', title:'Ventas por canal', desc:'análisis por plataforma de venta', prompt:'Analiza las ventas por canal de venta con tabla y gráfico circular.', chartType:'doughnut', chartData:{labels:['eBay','Wallapop','Ovoko'],datasets:[{data:[35,30,20],backgroundColor:COLORES,borderWidth:0}]} }
 ];
 
