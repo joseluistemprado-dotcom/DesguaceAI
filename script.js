@@ -716,3 +716,107 @@ function renderRelatedReports(relatedIds) {
         }, 100);
     });
 }
+// =====================================================
+// NAVEGACIÓN Y EXPANSIÓN DE DATOS (CSV BROWSER)
+// =====================================================
+
+// Elementos de navegación
+const navItems = {
+    bi: document.getElementById('nav-bi'),
+    vehiculos: document.getElementById('nav-vehiculos'),
+    recambios: document.getElementById('nav-recambios'),
+    ventas: document.getElementById('nav-ventas')
+};
+
+// Función para cambiar el estado activo de la navegación
+function setActiveNav(activeKey) {
+    Object.values(navItems).forEach(item => item.classList.remove('active'));
+    if (navItems[activeKey]) navItems[activeKey].classList.add('active');
+    
+    // Si no es BI, ocultamos el panel de entrada de la IA para centrar la vista en los datos
+    const aiPanel = document.querySelector('.ai-panel');
+    if (activeKey === 'bi') {
+        aiPanel.classList.remove('hidden');
+        reportContainer.classList.add('hidden'); // Ocultar reportes previos al volver a BI
+    } else {
+        aiPanel.classList.add('hidden');
+    }
+}
+
+// Escuchadores de eventos para navegación
+navItems.bi.addEventListener('click', (e) => {
+    e.preventDefault();
+    setActiveNav('bi');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+navItems.vehiculos.addEventListener('click', (e) => {
+    e.preventDefault();
+    loadAndDisplayCSV('vehiculos.csv', 'Listado Maestro de Vehículos', 'ph-car');
+    setActiveNav('vehiculos');
+});
+
+navItems.recambios.addEventListener('click', (e) => {
+    e.preventDefault();
+    loadAndDisplayCSV('piezas.csv', 'Catálogo Completo de Recambios', 'ph-wrench');
+    setActiveNav('recambios');
+});
+
+navItems.ventas.addEventListener('click', (e) => {
+    e.preventDefault();
+    loadAndDisplayCSV('ventas.csv', 'Registro Histórico de Ventas', 'ph-shopping-cart');
+    setActiveNav('ventas');
+});
+
+// Función para cargar, parsear y mostrar un CSV en el contenedor de informes
+function loadAndDisplayCSV(fileName, title, icon) {
+    reportContainer.classList.add('hidden');
+    loadingState.classList.remove('hidden');
+
+    fetch(fileName)
+        .then(response => {
+            if (!response.ok) throw new Error("No se pudo cargar el archivo CSV");
+            return response.text();
+        })
+        .then(csvText => {
+            Papa.parse(csvText, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data;
+                    const headers = results.meta.fields;
+                    
+                    // Limitamos a 200 filas para mantener rendimiento si es muy grande
+                    const displayData = data.slice(0, 200);
+
+                    const reportData = {
+                        title: title,
+                        summary: `Explorando datos directos desde ${fileName}. Se muestran las primeras ${displayData.length} entradas de un total de ${data.length}.`,
+                        metrics: [
+                            { title: "Total Registros", value: data.length, icon: icon, trend: "neutral", trendValue: "CSV" },
+                            { title: "Filas Visibles", value: displayData.length, icon: "ph-eye", trend: "neutral", trendValue: "Preview" }
+                        ],
+                        table: {
+                            headers: headers,
+                            rows: displayData.map(obj => headers.map(h => obj[h]))
+                        },
+                        chartConfig: null, // No gráfico para vista de exploración pura
+                        conclusions: `Esta vista permite verificar la integridad de los datos en el archivo <strong>${fileName}</strong>. Para análisis avanzados, usa el Asistente IA.`
+                    };
+
+                    renderReport(reportData, 'none', '');
+                    relatedReportsContainer.classList.add('hidden'); // Ocultar sugerencias en vista de datos
+                    
+                    loadingState.classList.add('hidden');
+                    reportContainer.classList.remove('hidden');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            });
+        })
+        .catch(error => {
+            console.error(error);
+            alert("Error al cargar los datos: " + error.message);
+            loadingState.classList.add('hidden');
+            setActiveNav('bi');
+        });
+}

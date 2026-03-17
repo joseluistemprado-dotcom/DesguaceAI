@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="styles.css">
     <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <!-- Phosphor Icons for modern iconography -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
@@ -24,19 +26,19 @@
                     <i class="ph ph-squares-four"></i>
                     <span>Dashboard</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#" class="nav-item" id="nav-vehiculos">
                     <i class="ph ph-car"></i>
                     <span>Vehículos</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#" class="nav-item" id="nav-recambios">
                     <i class="ph ph-wrench"></i>
                     <span>Recambios</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#" class="nav-item" id="nav-ventas">
                     <i class="ph ph-shopping-cart"></i>
                     <span>Ventas</span>
                 </a>
-                <a href="#" class="nav-item active">
+                <a href="#" class="nav-item active" id="nav-bi">
                     <i class="ph ph-chart-line-up"></i>
                     <span>Inteligencia de Negocio</span>
                 </a>
