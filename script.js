@@ -347,6 +347,186 @@ function updateRecommendations() {
 // =====================================================
 const COLORES = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899'];
 
+// --- HELPERS PARA EL MOTOR UNIFICADO ---
+function parseTimeFilter(pl) {
+    const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const now = new Date();
+    
+    // Mes específico
+    for (let i = 0; i < months.length; i++) {
+        if (pl.includes(months[i])) return { type:'month', value:i, label: months[i].charAt(0).toUpperCase() + months[i].slice(1) };
+    }
+    
+    if (pl.includes('este mes') || pl.includes('mes actual')) {
+        return { type:'month', value:now.getMonth(), label: months[now.getMonth()] };
+    }
+    
+    if (pl.includes('últimos 3 meses') || pl.includes('ultimo 3 mes')) {
+        const start = new Date(); start.setMonth(now.getMonth() - 2);
+        return { type:'range', start, end:now, label:'Últimos 3 meses' };
+    }
+
+    return { type:'all', label:'Histórico total' };
+}
+
+function parseDimension(pl) {
+    if (pl.includes('por día') || pl.includes('por dia') || pl.includes('diario')) return 'day';
+    if (pl.includes('por mes') || pl.includes('mensual')) return 'month';
+    if (pl.includes('por canal') || pl.includes('plataforma')) return 'canal';
+    if (pl.includes('por familia') || pl.includes('categoría')) return 'familia';
+    if (pl.includes('por vehículo') || pl.includes('por coche')) return 'vehiculo';
+    
+    // Inferencia por defecto
+    if (pl.includes('evolución') || pl.includes('tiempo')) return 'month';
+    if (pl.includes('distribución') || pl.includes('reparto')) return 'canal';
+    return 'canal';
+}
+
+function parseMetric(pl) {
+    if (pl.includes('beneficio') || pl.includes('margen') || pl.includes('ganancia')) return 'beneficio';
+    if (pl.includes('venta') || pl.includes('operación') || pl.includes('cantidad')) return 'ventas';
+    return 'ingresos'; // por defecto
+}
+
+function interpretPrompt(pl) {
+    return buildUnifiedReport(pl);
+}
+
+function buildUnifiedReport(pl) {
+    const time = parseTimeFilter(pl);
+    const dim = parseDimension(pl);
+    const met = parseMetric(pl);
+    const chart = resolveChartTypeFromPrompt(pl, dim === 'day' || dim === 'month' ? 'line' : 'bar');
+
+    console.log(`[AI Engine] Unificando: Tiempo=${time.label}, Dimensión=${dim}, Métrica=${met}`);
+
+    // 1. FILTRADO
+    let data = [...DB.ventas];
+    if (time.type === 'month') {
+        data = data.filter(v => {
+            const d = new Date(v.fecha_venta);
+            return d.getMonth() === time.value && d.getFullYear() === 2025;
+        });
+    } else if (time.type === 'range') {
+        data = data.filter(v => {
+            const d = new Date(v.fecha_venta);
+            return d >= time.start && d <= time.end;
+        });
+    }
+
+    // 2. AGRUPACIÓN Y MÉTRICA
+    const groups = {};
+    data.forEach(v => {
+        let key = 'Otros';
+        const d = new Date(v.fecha_venta);
+        
+        if (dim === 'day') key = `${d.getDate()}/${d.getMonth()+1}`;
+        else if (dim === 'month') key = d.toLocaleString('es-ES', { month: 'short' });
+        else if (dim === 'canal') key = v.canal_venta;
+        else if (dim === 'familia') {
+            const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
+            key = p ? p.familia : 'Sin familia';
+        }
+        else if (dim === 'vehiculo') {
+            const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
+            const veh = DB.vehiculos.find(x => x.id_vehiculo === p?.vehiculo_id);
+            key = veh ? `${veh.marca} ${veh.modelo}` : 'Varios';
+        }
+
+        let val = 0;
+        if (met === 'ingresos') val = parseFloat(v.precio_venta || 0);
+        else if (met === 'ventas') val = 1;
+        else if (met === 'beneficio') {
+            const p = DB.piezas.find(x => x.id_pieza === v.pieza_id);
+            val = parseFloat(v.precio_venta || 0) - (parseFloat(p?.precio || 0) * 0.2); // Simulación margen
+        }
+
+        groups[key] = (groups[key] || 0) + val;
+    });
+
+    // Ordenar y limitar si es ranking
+    let rows = Object.entries(groups);
+    if (dim !== 'day' && dim !== 'month') {
+        rows.sort((a,b) => b[1] - a[1]);
+        if (pl.includes('top')) rows = rows.slice(0, 10);
+    } else {
+        // Orden cronológico simple para días/meses si es posible
+    }
+
+    const totalVal = rows.reduce((s,[,v]) => s+v, 0);
+    const metricLabel = met === 'ingresos' ? 'Ingresos (€)' : (met === 'ventas' ? 'Ventas (ud)' : 'Beneficio (€)');
+
+    const finalTitle = `Análisis de ${metricLabel} ${dim === 'canal' ? 'por Canal' : 'por ' + dim} (${time.label})`;
+    
+    // Coherencia visual
+    let conclusions = `El análisis de <strong>${time.label}</strong> muestra un total de <strong>${met === 'ventas' ? totalVal : formatEur(totalVal)}</strong>. `;
+    if (rows.length > 0) {
+        conclusions += `El valor más alto se encuentra en <strong>${rows[0][0]}</strong>.`;
+    }
+    if (chart === 'doughnut' && rows.length > 10) {
+        conclusions += `<br/><br/>⚠️ <em>Nota: Un gráfico circular con más de 10 elementos puede ser difícil de leer. Se recomienda usar barras.</em>`;
+    }
+
+    return {
+        title: finalTitle,
+        summary: `Informe dinámico generado tras analizar ${data.length} registros del periodo ${time.label}. Agrupado por ${dim}.`,
+        metrics: [
+            { title: met === 'ventas' ? 'Volumen Total' : 'Valor Total', value: met === 'ventas' ? totalVal : formatEur(totalVal), icon: 'ph-chart-line-up', trend:'neutral', trendValue: time.label },
+            { title: 'Operaciones', value: data.length, icon: 'ph-receipt', trend:'neutral', trendValue: 'En periodo' }
+        ],
+        table: { 
+            headers: [dim.charAt(0).toUpperCase() + dim.slice(1), metricLabel, '% del total'], 
+            rows: rows.map(([k,v]) => [k, met === 'ventas' ? v : formatEur(v), totalVal > 0 ? ((v/totalVal)*100).toFixed(1)+'%' : '0%']) 
+        },
+        chartConfig: { 
+            labels: rows.map(r=>r[0]), 
+            datasets: [{ 
+                label: metricLabel, 
+                data: rows.map(r=>r[1].toFixed(2)), 
+                backgroundColor: chart === 'line' ? 'rgba(59,130,246,0.1)' : COLORES, 
+                borderColor: chart === 'line' ? '#3b82f6' : 'white',
+                fill: chart === 'line',
+                borderRadius: 6,
+                tension: 0.4
+            }] 
+        },
+        chartType: chart,
+        conclusions: conclusions,
+        relatedIds: ['ventas_mes', 'stock_actual']
+    };
+}
+
+function buildVehiculosReport(pl) {
+    const vehiculosConBeneficio = DB.vehiculos.map(v => {
+        const piezasV = DB.piezas.filter(p => p.vehiculo_id === v.id_vehiculo);
+        const ventasV = DB.ventas.filter(ve => piezasV.some(p => p.id_pieza === ve.pieza_id));
+        const ingresos = ventasV.reduce((s, ve) => s + parseFloat(ve.precio_venta || 0), 0);
+        const beneficio = ingresos - parseFloat(v.coste_compra || 0);
+        return { ...v, beneficio };
+    });
+
+    const groups = {};
+    vehiculosConBeneficio.forEach(v => {
+        const key = `${v.marca} ${v.modelo}`;
+        groups[key] = (groups[key] || 0) + v.beneficio;
+    });
+
+    let rows = Object.entries(groups).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+    return {
+        title: 'Beneficio por Vehículo',
+        summary: `Análisis de margen bruto (Ventas - Coste adquis.) para los vehículos en stock.`,
+        metrics: [{ title: 'Vehículo más rentable', value: rows[0]?.[0]||'—', icon:'ph-star', trend:'up', trendValue:formatEur(rows[0]?.[1]||0) }],
+        table: { headers: ['Vehículo','Margen Estimado (€)'], rows: rows.map(([k,v])=>[k, formatEur(v)]) },
+        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ label:'Margen', data:rows.map(r=>r[1]), backgroundColor:'#8b5cf6', borderRadius:4 }] },
+        chartType: 'bar',
+        conclusions: `Los vehículos de marca <strong>${rows[0]?.[0].split(' ')[0]}</strong> generan el mejor margen.`,
+        relatedIds: ['ventas_mes','piezas_top']
+    };
+}
+
+function buildMensualReport(pl) { return buildUnifiedReport(pl); }
+
 /**
  * Detecta inteligentemente el tipo de gráfico basado en el prompt del usuario.
  * @param {string} pl Prompt en minúsculas
@@ -357,170 +537,21 @@ function resolveChartTypeFromPrompt(pl, defaultType) {
     
     // Prioridad absoluta a palabras clave explícitas
     if (pl.includes('circular') || pl.includes('quesito') || pl.includes('pie') || pl.includes('tarta') || pl.includes('donut') || pl.includes('doughnut')) {
-        console.log(`[AI Debug] -> Tipo detectado: Circular (Doughnut)`);
         return 'doughnut';
     }
     if (pl.includes('barras')) {
-        if (pl.includes('horizontal')) {
-            console.log(`[AI Debug] -> Tipo detectado: Barras Horizontales`);
-            return 'bar-horizontal';
-        }
-        console.log(`[AI Debug] -> Tipo detectado: Barras`);
+        if (pl.includes('horizontal')) return 'bar-horizontal';
         return 'bar';
     }
     if (pl.includes('línea') || pl.includes('linea') || pl.includes('evolución') || pl.includes('evolucion') || pl.includes('tendencia')) {
-        console.log(`[AI Debug] -> Tipo detectado: Líneas`);
         return 'line';
     }
     
     // Inferencias basadas en el tipo de análisis si no se especifica tipo de gráfico
-    if (pl.includes('distribución') || pl.includes('distribucion') || pl.includes('porcentaje')) {
-        console.log(`[AI Debug] -> Inferencia: Distribución (Doughnut)`);
-        return 'doughnut';
-    }
-    if (pl.includes('comparativa') || pl.includes('ranking')) {
-        console.log(`[AI Debug] -> Inferencia: Comparativa (Bar / Bar-Horizontal)`);
-        return defaultType === 'none' ? 'bar' : defaultType;
-    }
+    if (pl.includes('distribución') || pl.includes('distribucion') || pl.includes('porcentaje')) return 'doughnut';
+    if (pl.includes('comparativa') || pl.includes('ranking')) return 'bar';
 
-    console.log(`[AI Debug] -> Usando tipo por defecto: ${defaultType}`);
     return defaultType;
-}
-
-function interpretPrompt(pl) {
-    if (pl.includes('canal') || pl.includes('plataform')) return buildCanalReport(pl);
-    if (pl.includes('familia') || pl.includes('categor')) return buildFamiliaReport(pl);
-    if ((pl.includes('pieza') || pl.includes('recambio')) && (pl.includes('top') || pl.includes('más vend') || pl.includes('ranking') || pl.includes('más vendid'))) return buildTopPiezasReport(pl);
-    if (pl.includes('sin vender') || pl.includes('sin rotac') || pl.includes('inactiv') || pl.includes('parad')) return buildSinVenderReport(pl);
-    if (pl.includes('stock') || pl.includes('inventari')) return buildStockReport(pl);
-    if (pl.includes('vehículo') || pl.includes('vehiculo') || pl.includes('rentable') || pl.includes('margen')) return buildVehiculosReport(pl);
-    if (pl.includes('mes') || pl.includes('mensual') || pl.includes('evoluc') || pl.includes('tendencia') || pl.includes('tiempo')) return buildMensualReport(pl);
-    if (pl.includes('venta') || pl.includes('factura') || pl.includes('ingres')) return buildVentasReport(pl);
-    return buildVentasReport(pl); // fallback
-}
-
-function buildVentasReport(pl) {
-    const canalTotals = {};
-    DB.ventas.forEach(v => { canalTotals[v.canal_venta] = (canalTotals[v.canal_venta] || 0) + parseFloat(v.precio_venta || 0); });
-    const rows = Object.entries(canalTotals).sort((a,b) => b[1]-a[1]);
-    const total = rows.reduce((s,[,v]) => s+v, 0);
-    return {
-        title: 'Informe de Ventas',
-        summary: `Se han registrado ${DB.ventas.length} ventas con un total de ${formatEur(total)}.`,
-        metrics: [
-            { title: 'Total ventas', value: DB.ventas.length, icon: 'ph-shopping-cart', trend:'up', trendValue:'+100%' },
-            { title: 'Ingresos', value: formatEur(total), icon: 'ph-currency-eur', trend:'up', trendValue:'Acumulado' }
-        ],
-        table: { headers: ['Canal','Total (€)','% del total'], rows: rows.map(([c,v]) => [c, formatEur(v), ((v/total)*100).toFixed(1)+'%']) },
-        chartConfig: { labels: rows.map(r=>r[0]), datasets: [{ label:'Ingresos', data: rows.map(r=>r[1].toFixed(2)), backgroundColor: COLORES, borderRadius:6 }] },
-        chartType: 'bar',
-        conclusions: `El canal <strong>${rows[0]?.[0]}</strong> es el más rentable. Diversificar la presencia en todos los canales es clave.`,
-        relatedIds: ['stock_actual', 'piezas_top']
-    };
-}
-
-function buildCanalReport(pl) { return buildVentasReport(pl); }
-
-function buildTopPiezasReport(pl) {
-    const piezaCount = {};
-    DB.ventas.forEach(v => { piezaCount[v.pieza_id] = (piezaCount[v.pieza_id] || 0) + 1; });
-    const top = Object.entries(piezaCount).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    const rows = top.map(([id, cnt]) => { const p = DB.piezas.find(x=>x.id_pieza===id); return [id, p?.nombre||'—', p?.familia||'—', cnt, formatEur(cnt*(parseFloat(p?.precio||0)))]; });
-    return {
-        title: 'Ranking de Piezas Más Vendidas',
-        summary: `Las siguientes piezas han generado la mayor rotación en el periodo analizado.`,
-        metrics: [{ title: 'Pieza estrella', value: rows[0]?.[1]||'—', icon: 'ph-star', trend:'up', trendValue:`${rows[0]?.[3]||0} ventas` }],
-        table: { headers: ['ID','Nombre','Familia','Ventas','Facturado'], rows },
-        chartConfig: { labels: rows.map(r=>r[1]), datasets:[{ label:'Ventas', data:rows.map(r=>r[3]), backgroundColor:'#3b82f6', borderRadius:6 }] },
-        chartType: 'bar-horizontal',
-        conclusions: `El producto <strong>${rows[0]?.[1]}</strong> lidera las ventas. Asegura stock suficiente.`,
-        relatedIds: ['ventas_mes','piezas_muertas']
-    };
-}
-
-function buildStockReport(pl) {
-    const famStock = {};
-    DB.piezas.forEach(p => { famStock[p.familia] = (famStock[p.familia]||0) + parseInt(p.stock_disponible||0); });
-    const rows = Object.entries(famStock).sort((a,b)=>b[1]-a[1]);
-    const total = rows.reduce((s,[,v])=>s+v,0);
-    const valor = DB.piezas.reduce((s,p)=>s+parseFloat(p.precio||0)*parseInt(p.stock_disponible||1),0);
-    return {
-        title: 'Análisis de Stock por Familia',
-        summary: `Stock total: ${total} unidades. Valor estimado: ${formatEur(valor)}.`,
-        metrics: [
-            { title: 'Unidades en stock', value: total, icon:'ph-package', trend:'neutral', trendValue:'Total' },
-            { title: 'Valor inventario', value: formatEur(valor), icon:'ph-currency-eur', trend:'up', trendValue:'Estimado' }
-        ],
-        table: { headers: ['Familia','Unidades','% del total'], rows: rows.map(([f,c])=>[f,c,((c/total)*100).toFixed(1)+'%']) },
-        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ data:rows.map(r=>r[1]), backgroundColor:COLORES, borderWidth:0 }] },
-        chartType: 'doughnut',
-        conclusions: `La familia <strong>${rows[0]?.[0]}</strong> concentra el mayor stock. Revisa la rotación de cada familia.`,
-        relatedIds: ['piezas_muertas','piezas_top']
-    };
-}
-
-function buildFamiliaReport(pl) { return buildStockReport(pl); }
-
-function buildSinVenderReport(pl) {
-    const soldIds = new Set(DB.ventas.map(v=>v.pieza_id));
-    const sinVender = DB.piezas.filter(p=>!soldIds.has(p.id_pieza));
-    const byFam = {};
-    sinVender.forEach(p=>{ byFam[p.familia]=(byFam[p.familia]||0)+1; });
-    const rows = Object.entries(byFam).sort((a,b)=>b[1]-a[1]);
-    const valor = sinVender.reduce((s,p)=>s+parseFloat(p.precio||0)*parseInt(p.stock_disponible||1),0);
-    return {
-        title: 'Piezas Sin Rotación',
-        summary: `${sinVender.length} piezas sin ninguna venta. Valor inmovilizado: ${formatEur(valor)}.`,
-        metrics: [
-            { title: 'Sin vender', value: sinVender.length, icon:'ph-warning', trend:'down', trendValue:'Requiere acción' },
-            { title: 'Capital inmovilizado', value: formatEur(valor), icon:'ph-currency-eur', trend:'down', trendValue:'Urgente' }
-        ],
-        table: { headers: ['Familia','Piezas sin vender'], rows },
-        chartConfig: { labels: rows.map(r=>r[0]), datasets:[{ label:'Piezas', data:rows.map(r=>r[1]), backgroundColor:'#ef4444', borderRadius:6 }] },
-        chartType: 'bar',
-        conclusions: `Se recomienda reducir el precio en <strong>${rows[0]?.[0]}</strong> para activar la rotación.`,
-        relatedIds: ['ventas_mes','stock_actual']
-    };
-}
-
-function buildVehiculosReport(pl) {
-    const vBeneficio = DB.vehiculos.map(v => {
-        const piezasV = DB.piezas.filter(p=>p.vehiculo_id===v.id_vehiculo);
-        const ventasV = DB.ventas.filter(ve=>piezasV.find(p=>p.id_pieza===ve.pieza_id));
-        const ingresos = ventasV.reduce((s,ve)=>s+parseFloat(ve.precio_venta||0),0);
-        const beneficio = ingresos - parseFloat(v.coste_compra||0);
-        return { ...v, ingresos, beneficio };
-    }).sort((a,b)=>b.beneficio-a.beneficio).slice(0,10);
-    return {
-        title: 'Vehículos Más Rentables',
-        summary: `Análisis de rentabilidad por vehículo basado en ingresos de piezas vendidas.`,
-        metrics: [{ title: 'Más rentable', value: `${vBeneficio[0]?.marca||'—'} ${vBeneficio[0]?.modelo||''}`, icon:'ph-car', trend:'up', trendValue: formatEur(vBeneficio[0]?.beneficio||0) }],
-        table: { headers: ['ID','Marca','Modelo','Coste','Ingresos','Beneficio'], rows: vBeneficio.map(v=>[v.id_vehiculo,v.marca,v.modelo,formatEur(parseFloat(v.coste_compra)),formatEur(v.ingresos),formatEur(v.beneficio)]) },
-        chartConfig: { labels: vBeneficio.map(v=>`${v.marca} ${v.modelo}`), datasets:[{ label:'Beneficio (€)', data:vBeneficio.map(v=>v.beneficio.toFixed(2)), backgroundColor:'#8b5cf6', borderRadius:6 }] },
-        chartType: 'bar',
-        conclusions: `Los vehículos <strong>${vBeneficio[0]?.marca}</strong> presentan el mayor retorno. Prioriza su compra.`,
-        relatedIds: ['ventas_mes','piezas_top']
-    };
-}
-
-function buildMensualReport(pl) {
-    const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const monthData = monthLabels.map((_, i) => ({
-        mes: monthLabels[i],
-        total: DB.ventas.filter(v=>{ const d = new Date(v.fecha_venta); return d.getMonth()===i && d.getFullYear()===2025; }).reduce((s,v)=>s+parseFloat(v.precio_venta||0),0),
-        cnt: DB.ventas.filter(v=>{ const d = new Date(v.fecha_venta); return d.getMonth()===i && d.getFullYear()===2025; }).length
-    }));
-    const topMes = [...monthData].sort((a,b)=>b.total-a.total)[0];
-    return {
-        title: 'Evolución Mensual de Ingresos 2025',
-        summary: `Tendencia de ventas e ingresos a lo largo de los meses del año.`,
-        metrics: [{ title: 'Mejor mes', value: topMes.mes, icon:'ph-calendar', trend:'up', trendValue: formatEur(topMes.total) }],
-        table: { headers: ['Mes','Ventas','Ingresos (€)'], rows: monthData.map(m=>[m.mes, m.cnt, formatEur(m.total)]) },
-        chartConfig: { labels: monthLabels, datasets:[{ label:'Ingresos', data:monthData.map(m=>m.total.toFixed(2)), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4 }] },
-        chartType: 'line',
-        conclusions: `El mes de <strong>${topMes.mes}</strong> ha sido el mejor del año. Con tendencia ${monthData[11].total > monthData[0].total ? 'alcista' : 'bajista'}.`,
-        relatedIds: ['ventas_canal','piezas_top']
-    };
 }
 
 // =====================================================
